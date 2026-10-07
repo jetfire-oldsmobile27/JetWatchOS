@@ -1,0 +1,456 @@
+#include "apps.h"
+#include "ui/ui_common.h"
+#include "core/Database.h"
+#include "core/PowerManager.h"
+#include "core/BleService.h"
+#include "core/Protocol.h"
+#include <WiFi.h>
+#include <functional>
+
+#ifndef FIRMWARE_VERSION_STR
+#define FIRMWARE_VERSION_STR "1.0.0-dev"
+#endif
+
+class SettingsApp : public App {
+public:
+    const char* name() const override { return "Settings"; }
+
+    void onEnter(lv_obj_t* parent) override {
+        _parent = parent;
+        _build();
+    }
+
+    void onExit() override {
+        if (_info_timer) { lv_timer_del(_info_timer); _info_timer  =nullptr; }
+    }
+
+private:
+    lv_obj_t* _parent  {nullptr};
+    lv_obj_t* _list    {nullptr};
+    lv_obj_t* _kb      {nullptr};
+    lv_obj_t* _ta      {nullptr};
+    lv_obj_t* _slider_ov  {nullptr};
+    lv_timer_t* _info_timer  {nullptr};
+
+    struct PwrLabels {
+        lv_obj_t* charging   {nullptr};
+        lv_obj_t* discharge  {nullptr};
+        lv_obj_t* vbus_in    {nullptr};
+        lv_obj_t* chg_state  {nullptr};
+        lv_obj_t* batt_mv    {nullptr};
+        lv_obj_t* vbus_mv    {nullptr};
+        lv_obj_t* sys_mv     {nullptr};
+        lv_obj_t* batt_pct   {nullptr};
+        lv_obj_t* firmware   {nullptr};
+    } _pwr;
+
+    enum Field { FIELD_NONE, FIELD_SSID, FIELD_PWD, FIELD_CITY };
+
+    // ------------------------------------------------------------------
+    //  Build
+    // ------------------------------------------------------------------
+    void _build() {
+        if (_info_timer) { lv_timer_del(_info_timer); _info_timer= nullptr; }
+        _pwr = PwrLabels{};
+        _kb=nullptr;
+        _ta=nullptr;
+        _slider_ov=nullptr;
+
+        lv_obj_clean(_parent);
+
+        ui_make_screen(_parent);
+        ui_make_statusbar(_parent);
+
+        _list = lv_obj_create(_parent);
+        lv_obj_set_size(_list, LV_PCT(100), LV_PCT(100) - 24);
+        lv_obj_align(_list, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_set_style_bg_opa(_list, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(_list, 0, 0);
+        lv_obj_set_flex_flow(_list, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_all(_list, 4, 0);
+        lv_obj_set_style_pad_row(_list, 4, 0);
+        lv_obj_set_scrollbar_mode(_list, LV_SCROLLBAR_MODE_OFF);
+
+        auto& cfg = Database::inst().config();
+
+        // ---------- Network ----------
+        _row_switch(_list, "WiFi", cfg.wifi_on, [](bool v){
+            auto& c = Database::inst().config();
+            c.wifi_on = v; Database::inst().saveConfig();
+            if (v && c.wifi_ssid[0]) {
+                wifi_conn_params_t p;
+                p.ssid = c.wifi_ssid; p.password = c.wifi_pwd;
+                hw_set_wifi_connect(p);
+            } else if (!v) {
+                WiFi.disconnect(true);
+            }
+        });
+        _row_text(_list, "SSID",     cfg.wifi_ssid, FIELD_SSID);
+        _row_text(_list, "Password", "******",      FIELD_PWD);
+        _row_text(_list, "City",     cfg.city,      FIELD_CITY);
+
+        // ---------- Connectivity ----------
+        _row_switch(_list, "Bluetooth", cfg.bt_on, [](bool v){
+            auto& c = Database::inst().config();
+            c.bt_on = v; Database::inst().saveConfig();
+            if (v) { BleService::inst().begin(proto::DEVICE_NAME);
+                     PowerManager::inst().setBtActive(true); }
+            else   { BleService::inst().end();
+                     PowerManager::inst().setBtActive(false); }
+        });
+
+        // ---------- Display (только value + >, без inline-слайдера) ----------
+        _row_value(_list, "Brightness", cfg.brightness, 0, 255,
+            [](int v){
+                Database::inst().config().brightness = v;
+                hw_set_disp_backlight(v);
+                Database::inst().saveConfig();
+            });
+        _row_value(_list, "Timeout", cfg.disp_timeout_s, 0, 180,
+            [](int v){
+                Database::inst().config().disp_timeout_s = v;
+                PowerManager::inst().setScreenTimeout(v * 1000UL);
+                Database::inst().saveConfig();
+            });
+
+        // ---------- Power info ----------
+        _row_separator(_list, "POWER");
+        _row_info(_list, "Charging",     &_pwr.charging);
+        _row_info(_list, "Discharge",    &_pwr.discharge);
+        _row_info(_list, "USB PlugIn",   &_pwr.vbus_in);
+        _row_info(_list, "CHG state",    &_pwr.chg_state);
+        _row_info(_list, "Batt Voltage", &_pwr.batt_mv);
+        _row_info(_list, "USB Voltage",  &_pwr.vbus_mv);
+        _row_info(_list, "SYS Voltage",  &_pwr.sys_mv);
+        _row_info(_list, "Batt Percent", &_pwr.batt_pct);
+
+        // ---------- Firmware ----------
+        _row_separator(_list, "ABOUT");
+        _row_info(_list, "Firmware",     &_pwr.firmware);
+
+        // ---------- Keyboard ----------
+        _kb = lv_keyboard_create(_parent);
+        lv_obj_add_flag(_kb, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_size(_kb, LV_PCT(100), LV_PCT(50));
+        lv_obj_align(_kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_clear_flag(_kb, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_move_foreground(_kb);
+
+        lv_obj_add_event_cb(_kb, [](lv_event_t* e){
+            auto* s = (SettingsApp*)lv_event_get_user_data(e);
+            if (s->_ta) {
+                const char* txt = lv_textarea_get_text(s->_ta);
+                auto& cfg = Database::inst().config();
+                Field field = static_cast<Field>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(s->_ta)));
+                if (field == FIELD_SSID) strlcpy(cfg.wifi_ssid, txt, sizeof(cfg.wifi_ssid));
+                if (field == FIELD_PWD)  strlcpy(cfg.wifi_pwd,  txt, sizeof(cfg.wifi_pwd));
+                if (field == FIELD_CITY) strlcpy(cfg.city,      txt, sizeof(cfg.city));
+                Database::inst().saveConfig();
+            }
+            lv_async_call([](void* p){
+                ((SettingsApp*)p)->_build();
+            }, s);
+        }, LV_EVENT_READY, this);
+
+        lv_obj_add_event_cb(_kb, [](lv_event_t* e){
+            auto* s = (SettingsApp*)lv_event_get_user_data(e);
+            lv_async_call([](void* p){
+                ((SettingsApp*)p)->_build();
+            }, s);
+        }, LV_EVENT_CANCEL, this);
+
+        _refresh_power();
+        _info_timer = lv_timer_create(_pwr_timer_cb, 2000, this);
+    }
+
+    // ------------------------------------------------------------------
+    //  Power info
+    // ------------------------------------------------------------------
+    static void _pwr_timer_cb(lv_timer_t* t) {
+        ((SettingsApp*)lv_timer_get_user_data(t))->_refresh_power();
+    }
+
+    void _refresh_power()
+    {
+        if (!_pwr.charging) return;
+
+        if (_pwr.firmware) {
+            lv_label_set_text(_pwr.firmware, FIRMWARE_VERSION_STR);
+        }
+
+#if defined(USING_PMU_MANAGE)
+        static const char* chg_states[] = {
+            "Tri", "Pre", "CC", "CV", "Done", "None"
+        };
+        bool    chg  = instance.pmu.isCharging();
+        bool    dis  = instance.pmu.isDischarge();
+        bool    vbus = instance.pmu.isVbusIn();
+        uint8_t cs   = instance.pmu.getChargerStatus();
+
+        lv_label_set_text(_pwr.charging, chg ? "YES" : "NO");
+        lv_obj_set_style_text_color(_pwr.charging,
+            chg ? lv_color_hex(0x4CAF50) : lv_color_white(), 0);
+        lv_label_set_text(_pwr.discharge, dis  ? "YES" : "NO");
+        lv_label_set_text(_pwr.vbus_in,   vbus ? "YES" : "NO");
+        lv_label_set_text(_pwr.chg_state, (cs < 6) ? chg_states[cs] : "?");
+        lv_label_set_text_fmt(_pwr.batt_mv,  "%u mV", instance.pmu.getBattVoltage());
+        lv_label_set_text_fmt(_pwr.vbus_mv,  "%u mV", instance.pmu.getVbusVoltage());
+        lv_label_set_text_fmt(_pwr.sys_mv,   "%u mV", instance.pmu.getSystemVoltage());
+        lv_label_set_text_fmt(_pwr.batt_pct, "%d%%",  instance.pmu.getBatteryPercent());
+#else
+        monitor_params_t mp; hw_get_monitor_params(mp);
+        lv_label_set_text(_pwr.charging,  "n/a");
+        lv_label_set_text(_pwr.discharge, "n/a");
+        lv_label_set_text(_pwr.vbus_in,   "n/a");
+        lv_label_set_text(_pwr.chg_state, mp.charge_state.c_str());
+        lv_label_set_text_fmt(_pwr.batt_mv,  "%u mV", mp.battery_voltage);
+        lv_label_set_text_fmt(_pwr.vbus_mv,  "%u mV", mp.usb_voltage);
+        lv_label_set_text_fmt(_pwr.sys_mv,   "%u mV", mp.sys_voltage);
+        lv_label_set_text_fmt(_pwr.batt_pct, "%d%%",  mp.battery_percent);
+#endif
+    }
+
+    // ------------------------------------------------------------------
+    //  Row: separator / info / switch / text / value+">"
+    // ------------------------------------------------------------------
+
+    void _row_separator(lv_obj_t* parent, const char* title)
+    {
+        lv_obj_t* row = lv_obj_create(parent);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(row, LV_PCT(100), 20);
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_hor(row, 10, 0);
+        lv_obj_set_style_pad_ver(row, 0, 0);
+        ui_make_label(row, &font_alibaba_12, lv_color_hex(0x666666), title);
+    }
+
+    void _row_info(lv_obj_t* parent, const char* name, lv_obj_t** out)
+    {
+        lv_obj_t* row = lv_obj_create(parent);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(row, LV_PCT(100), 28);
+        lv_obj_set_style_radius(row, 6, 0);
+        lv_obj_set_style_bg_color(row, lv_color_hex(0x161616), 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_hor(row, 10, 0);
+        lv_obj_set_style_pad_ver(row, 0, 0);
+        ui_make_label(row, &font_alibaba_12, lv_color_hex(0xBBBBBB), name);
+        lv_obj_t* val = ui_make_label(row, &font_alibaba_12, lv_color_white(), "--");
+        lv_obj_align(val, LV_ALIGN_RIGHT_MID, 0, 0);
+        if (out) *out = val;
+    }
+
+    void _row_switch(lv_obj_t* parent, const char* name, bool val,
+                     std::function<void(bool)> cb)
+    {
+        lv_obj_t* row = lv_obj_create(parent);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(row, LV_PCT(100), 40);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_bg_color(row, lv_color_hex(0x1F1F1F), 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_hor(row, 10, 0);
+        ui_make_label(row, &font_alibaba_24, lv_color_white(), name);
+
+        lv_obj_t* sw = lv_switch_create(row);
+        lv_obj_align(sw, LV_ALIGN_RIGHT_MID, 0, 0);
+        if (val) lv_obj_add_state(sw, LV_STATE_CHECKED);
+
+        auto* fn = new std::function<void(bool)>(cb);
+        lv_obj_add_event_cb(sw, [](lv_event_t* e){
+            auto* f = (std::function<void(bool)>*)lv_event_get_user_data(e);
+            lv_obj_t* s = HW_EV_OBJ(e);
+            (*f)(lv_obj_has_state(s, LV_STATE_CHECKED));
+        }, LV_EVENT_VALUE_CHANGED, fn);
+        lv_obj_add_event_cb(sw, [](lv_event_t* e){
+            auto* f = (std::function<void(bool)>*)lv_event_get_user_data(e);
+            delete f;
+        }, LV_EVENT_DELETE, fn);
+    }
+
+    void _row_text(lv_obj_t* parent, const char* name,
+                   const char* val, Field field)
+    {
+        lv_obj_t* row = lv_obj_create(parent);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(row, LV_PCT(100), 40);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_bg_color(row, lv_color_hex(0x1F1F1F), 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_hor(row, 10, 0);
+        lv_obj_set_user_data(row, (void*)(intptr_t)field);
+        ui_make_label(row, &font_alibaba_24, lv_color_white(), name);
+
+        // Правая половина кликабельна: «значение >»
+        lv_obj_t* hit = lv_obj_create(row);
+        lv_obj_set_size(hit, LV_PCT(55), LV_PCT(100));
+        lv_obj_align(hit, LV_ALIGN_RIGHT_MID, 0, 0);
+        lv_obj_set_style_bg_opa(hit, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(hit, 0, 0);
+        lv_obj_set_style_pad_all(hit, 0, 0);
+        lv_obj_clear_flag(hit, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+
+        lv_obj_t* lbl = ui_make_label(hit, &font_alibaba_24,
+                                      lv_color_hex(0xAAAAAA), val);
+        lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
+        lv_obj_t* chev = ui_make_label(hit, &font_alibaba_24,
+                                       lv_color_hex(0x666666), ">");
+        lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
+
+        lv_obj_add_event_cb(hit, [](lv_event_t* e){
+            auto* s = (SettingsApp*)lv_event_get_user_data(e);
+            if (s->_ta) return;
+
+            lv_obj_add_flag(s->_list, LV_OBJ_FLAG_HIDDEN);
+
+            lv_obj_t* hit = HW_EV_OBJ(e);
+            lv_obj_t* row = lv_obj_get_parent(hit);
+
+            s->_ta = lv_textarea_create(s->_parent);
+            lv_obj_set_size(s->_ta, LV_PCT(90), 44);
+            lv_obj_align(s->_ta, LV_ALIGN_TOP_MID, 0, 36);
+            lv_textarea_set_one_line(s->_ta, true);
+            lv_textarea_set_text(s->_ta,
+                lv_label_get_text(lv_obj_get_child(hit, 0)));
+            lv_obj_set_user_data(s->_ta, lv_obj_get_user_data(row));
+            lv_obj_clear_flag(s->_ta, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_move_foreground(s->_ta);
+
+            lv_group_t* g = lv_group_get_default();
+            if (g) { lv_group_add_obj(g, s->_ta); lv_group_focus_obj(s->_ta); }
+
+            lv_obj_clear_flag(s->_kb, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_foreground(s->_kb);
+            lv_keyboard_set_textarea(s->_kb, s->_ta);
+        }, LV_EVENT_SHORT_CLICKED, this); 
+    }
+
+    void _row_value(lv_obj_t* parent, const char* name,
+                    int val, int mn, int mx,
+                    std::function<void(int)> cb)
+    {
+        lv_obj_t* row = lv_obj_create(parent);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(row, LV_PCT(100), 40);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_bg_color(row, lv_color_hex(0x1F1F1F), 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_hor(row, 10, 0);
+        ui_make_label(row, &font_alibaba_24, lv_color_white(), name);
+
+        // Кликабельная правая часть
+        lv_obj_t* hit = lv_obj_create(row);
+        lv_obj_set_size(hit, LV_PCT(55), LV_PCT(100));
+        lv_obj_align(hit, LV_ALIGN_RIGHT_MID, 0, 0);
+        lv_obj_set_style_bg_opa(hit, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(hit, 0, 0);
+        lv_obj_set_style_pad_all(hit, 0, 0);
+        lv_obj_clear_flag(hit, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+
+        lv_obj_t* v = ui_make_label(hit, &font_alibaba_24,
+                                    lv_color_hex(0xAAAAAA), "");
+        lv_label_set_text_fmt(v, "%d", val);
+        lv_obj_align(v, LV_ALIGN_LEFT_MID, 0, 0);
+
+        lv_obj_t* chev = ui_make_label(hit, &font_alibaba_24,
+                                       lv_color_hex(0x666666), ">");
+        lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
+
+        // Контекст для колбэка (утечка освобождается в DELETE)
+        struct RowCtx {
+            SettingsApp* app;
+            const char*  title;
+            int          mn, mx, val;
+            std::function<void(int)> cb;
+        };
+        auto* rc = new RowCtx{this, name, mn, mx, val, cb};
+
+        lv_obj_add_event_cb(hit, [](lv_event_t* e){
+            auto* rc = (RowCtx*)lv_event_get_user_data(e);
+            rc->app->_open_slider(rc->title, rc->mn, rc->mx, rc->val, rc->cb);
+        }, LV_EVENT_SHORT_CLICKED, rc);
+
+        lv_obj_add_event_cb(hit, [](lv_event_t* e){
+            auto* rc = (RowCtx*)lv_event_get_user_data(e);
+            delete rc;
+        }, LV_EVENT_DELETE, rc);
+    }
+
+    // ------------------------------------------------------------------
+    //  Полноэкранный вертикальный слайдер
+    // ------------------------------------------------------------------
+    void _open_slider(const char* title, int mn, int mx, int val,
+                      std::function<void(int)> cb)
+    {
+        if (_slider_ov) return;
+
+        lv_obj_add_flag(_list, LV_OBJ_FLAG_HIDDEN);
+        if (_kb) lv_obj_add_flag(_kb, LV_OBJ_FLAG_HIDDEN);
+
+        lv_obj_t* ov = lv_obj_create(_parent);
+        lv_obj_set_size(ov, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_style_bg_color(ov, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(ov, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(ov, 0, 0);
+        lv_obj_set_style_radius(ov, 0, 0);
+        lv_obj_set_style_pad_all(ov, 0, 0);
+        lv_obj_align(ov, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_clear_flag(ov, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_move_foreground(ov);
+        _slider_ov = ov;
+
+        // Заголовок
+        lv_obj_t* t = ui_make_label(ov, &font_alibaba_24, lv_color_white(), title);
+        lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 40);
+
+        // Текущее значение
+        lv_obj_t* v = ui_make_label(ov, &font_alibaba_60, lv_color_white(), "");
+        lv_label_set_text_fmt(v, "%d", val);
+        lv_obj_align(v, LV_ALIGN_TOP_MID, 0, 80);
+
+        // Вертикальный слайдер (LVGL сам сделает вертикальным по размеру)
+        lv_obj_t* sl = lv_slider_create(ov);
+        lv_obj_set_size(sl, 44, 220);
+        lv_obj_align(sl, LV_ALIGN_CENTER, 0, 60);
+        lv_slider_set_range(sl, mn, mx);
+        lv_slider_set_value(sl, val, LV_ANIM_OFF);
+
+        // Кнопка «OK» — закрыть и вернуться к списку
+        lv_obj_t* ok = ui_make_btn(ov, "OK", nullptr, nullptr, 160, 52);
+        lv_obj_align(ok, LV_ALIGN_BOTTOM_MID, 0, -30);
+
+        struct SlCtx {
+            std::function<void(int)> cb;
+            lv_obj_t* val_lbl;
+            lv_obj_t* overlay;
+            SettingsApp* app;
+        };
+        auto* c = new SlCtx{cb, v, ov, this};
+
+        lv_obj_add_event_cb(sl, [](lv_event_t* e){
+            auto* c = (SlCtx*)lv_event_get_user_data(e);
+            int value = lv_slider_get_value(HW_EV_OBJ(e));
+            lv_label_set_text_fmt(c->val_lbl, "%d", value);
+            c->cb(value);
+        }, LV_EVENT_VALUE_CHANGED, c);
+
+        lv_obj_add_event_cb(ok, [](lv_event_t* e){
+            auto* c = (SlCtx*)lv_event_get_user_data(e);
+            UI_OBJ_DEL(c->overlay);
+            c->app->_slider_ov =nullptr;
+            SettingsApp* app = c->app;
+            delete c;
+            lv_async_call([](void* p){
+                ((SettingsApp*)p)->_build();
+            }, app);
+        }, LV_EVENT_CLICKED, c);
+    }
+};
+
+std::unique_ptr<App> app_settings_make() {
+    return std::make_unique<SettingsApp>();
+}
