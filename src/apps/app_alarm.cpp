@@ -2,7 +2,7 @@
 #include "ui/ui_common.h"
 #include "core/Database.h"
 
-class AlarmApp : public App {
+class AlarmApp final : public App {
 public:
     const char* name() const override { return "Alarm"; }
 
@@ -58,7 +58,6 @@ private:
         a.hour = (a.hour + 1) % 24;
         if (a.hour == 0) a.enabled = !a.enabled;
         Database::inst().saveConfig();
-        auto* app = (AlarmApp*)nullptr; 
         
     }
 };

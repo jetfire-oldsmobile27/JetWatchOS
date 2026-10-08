@@ -5,7 +5,7 @@
 
 //LV_IMG_DECLARE(img_walkie);
 
-class PedometerApp : public App {
+class PedometerApp final : public App {
 public:
     const char* name() const override { return "Steps"; }
     uint32_t tickPeriodMs() const override { return 1000; }

@@ -3,7 +3,7 @@
 #include "core/PowerManager.h"
 
 
-class MusicApp : public App {
+class MusicApp final : public App {
 public:
     const char* name() const override { return "Music"; }
 

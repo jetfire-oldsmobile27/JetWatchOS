@@ -7,7 +7,7 @@
 // Класс для учёта шагов во время тренировки — опирается на общий IMU-счётчик,
 // который пишет в Database. Мы отслеживаем дельту.
 
-class TrainingApp : public App {
+class TrainingApp final : public App {
 public:
     const char* name() const override { return "Training"; }
     uint32_t tickPeriodMs() const override { return 1000; }

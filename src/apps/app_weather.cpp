@@ -5,7 +5,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-class WeatherApp : public App {
+class WeatherApp final : public App {
 public:
     const char* name() const override { return "Weather"; }
     uint32_t tickPeriodMs() const override { return 60000; }

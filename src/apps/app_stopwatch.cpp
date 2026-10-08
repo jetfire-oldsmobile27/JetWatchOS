@@ -2,7 +2,7 @@
 #include "ui/ui_common.h"
 #include "core/PowerManager.h"
 
-class StopwatchApp : public App {
+class StopwatchApp final : public App {
 public:
     const char* name() const override { return "Stopwatch"; }
 

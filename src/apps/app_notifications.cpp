@@ -45,7 +45,7 @@ void app_notifications_push(const char* app, const char* title, const char* body
     lv_timer_set_repeat_count(t, 1);
 }
 
-class NotificationsApp : public App {
+class NotificationsApp final : public App {
 public:
     const char* name() const override { return "Notifications"; }
 

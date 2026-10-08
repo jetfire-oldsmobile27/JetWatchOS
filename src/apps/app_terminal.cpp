@@ -1,7 +1,7 @@
 #include "apps.h"
 #include "ui/ui_common.h"
 
-class TerminalApp : public App {
+class TerminalApp final : public App {
 public:
     const char* name() const override { return "Terminal"; }
     uint32_t tickPeriodMs() const override { return 100; }

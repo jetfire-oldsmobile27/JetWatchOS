@@ -3,7 +3,7 @@
 #include "core/PowerManager.h"
 #include "core/Database.h"
 
-class FlashlightApp : public App {
+class FlashlightApp final : public App {
 public:
     const char* name() const override { return "Flashlight"; }
 

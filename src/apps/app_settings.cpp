@@ -11,7 +11,7 @@
 #define FIRMWARE_VERSION_STR "1.0.0-dev"
 #endif
 
-class SettingsApp : public App {
+class SettingsApp final : public App {
 public:
     const char* name() const override { return "Settings"; }
 
