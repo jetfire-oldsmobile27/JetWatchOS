@@ -5,6 +5,7 @@
 static lv_obj_t *l_h, *l_m, *l_c, *l_d;
 #if defined(USING_BMA423_SENSOR)
 static lv_obj_t *l_temp;
+static lv_obj_t *l_temp_unit;
 #endif
 
 
@@ -32,8 +33,12 @@ void face_default_build(lv_obj_t* parent)
 
 #if defined(USING_BMA423_SENSOR)
     l_temp = ui_make_label(parent, &font_alibaba_24,
-                           lv_color_hex(0xAAAAAA), "--°C");
+                           lv_color_hex(0xAAAAAA), "--");
     lv_obj_align(l_temp, LV_ALIGN_CENTER, 0, 110);
+
+    l_temp_unit = ui_make_label(parent, &lv_font_montserrat_14,
+                                lv_color_hex(0xAAAAAA), "°C");
+    lv_obj_align(l_temp_unit, LV_ALIGN_CENTER, 40, 106);
 #endif
 }
 
@@ -59,10 +64,10 @@ void face_default_update()
 #if defined(USING_BMA423_SENSOR)
     if (l_temp) {
         if (!(hw_get_device_online() & HW_BMA423_ONLINE)) {
-            lv_label_set_text(l_temp, "--°C");
+            lv_label_set_text(l_temp, "--");
         } else {
             float c = instance.sensor.getTemperature(SensorBMA423::TEMP_DEG);
-            lv_label_set_text_fmt(l_temp, "%.0f°C", c);
+            lv_label_set_text_fmt(l_temp, "%.0f", c);
         }
     }
 #endif

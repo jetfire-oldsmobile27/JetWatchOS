@@ -68,7 +68,10 @@ void AppManager::launchApp(std::unique_ptr<App> app)
     lv_obj_clear_flag(_app_layer, LV_OBJ_FLAG_SCROLLABLE);
 
     _current->onEnter(_app_layer);
+    lv_obj_add_flag(_app_layer, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(_app_layer, on_gesture, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_event_cb(lv_screen_active(), on_gesture, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_event_cb(lv_layer_top(),      on_gesture, LV_EVENT_GESTURE, nullptr);
     ui_enable_gesture_bubble(_app_layer);
     _state = State::App;
 

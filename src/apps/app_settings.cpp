@@ -628,14 +628,14 @@ private:
         _step_val_lbl = v;
 
         // ——— кнопки − и + ———
-        auto mk = [&](const char* sym, lv_align_t align, lv_coord_t dx, int delta){
+        auto mk = [&](const char* sym, lv_coord_t dx, lv_coord_t dy, int delta){
             lv_obj_t* b = lv_btn_create(ov);
-            lv_obj_set_size(b, 110, 110);
+            lv_obj_set_size(b, 90, 90);
             lv_obj_set_style_radius(b, 24, 0);
             lv_obj_set_style_bg_color(b, lv_color_hex(0x2A2A2A), 0);
             lv_obj_set_style_bg_color(b, lv_color_hex(0x3A3A3A), LV_STATE_PRESSED);
             lv_obj_set_style_shadow_width(b, 0, 0);
-            lv_obj_align(b, LV_ALIGN_CENTER, dx, 60);
+            lv_obj_align(b, LV_ALIGN_CENTER, dx, dy);
             lv_obj_add_event_cb(b, [](lv_event_t* e){
                 auto* s = (SettingsApp*)lv_event_get_user_data(e);
                 int d = (int)(intptr_t)lv_obj_get_user_data(HW_EV_OBJ(e));
@@ -653,8 +653,8 @@ private:
             lv_obj_set_style_text_color(l, lv_color_white(), 0);
             lv_obj_center(l);
         };
-        mk(LV_SYMBOL_MINUS, LV_ALIGN_CENTER, -80, -_step_step);
-        mk(LV_SYMBOL_PLUS,  LV_ALIGN_CENTER,  80,  _step_step);
+        mk("-", -75, 25, -_step_step);
+        mk("+",  75, 25,  _step_step);
 
         // ——— OK ———
         lv_obj_t* ok = ui_make_btn(ov, "OK", nullptr, nullptr, 180, 52);
