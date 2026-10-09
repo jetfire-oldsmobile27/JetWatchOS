@@ -11,6 +11,8 @@
 #include "core/Protocol.h"
 #include "apps/apps.h"
 
+#include <expected>
+
 
 // ============================================================================
 //  BMA423 — педометр через IRQ (SENSOR_STEPS_UPDATED)
@@ -143,6 +145,59 @@ static void register_apps()
     m.registerApp("Settings",      &img_settings,   app_settings_make);
 }
 
+// ============================================================================
+//  Синхронизация RTC с хоста по Serial (post-flash hook)
+//  Формат:  "TS YYYY MM DD hh mm ss\n"  — локальное время
+// ============================================================================
+static void poll_serial_time_sync()
+{
+    static char   buf[48];
+    static size_t len = 0;
+
+    while (Serial.available()) {
+        int ci = Serial.read();
+        if (ci < 0) break;
+        char c = (char)ci;
+
+        if (c == '\r') continue;
+
+        if (c == '\n') {
+            buf[len] = 0;
+            if (len > 3 && !strncmp(buf, "TS ", 3)) {
+                int y, mo, d, h, mi, s;
+                if (sscanf(buf + 3, "%d %d %d %d %d %d",
+                           &y, &mo, &d, &h, &mi, &s) == 6
+                    && y >= 2020 && y <= 2099
+                    && mo >= 1 && mo <= 12
+                    && d  >= 1 && d  <= 31
+                    && h  >= 0 && h  <= 23
+                    && mi >= 0 && mi <= 59
+                    && s  >= 0 && s  <= 60)
+                {
+                    struct tm t = {};
+                    t.tm_year = y  - 1900;
+                    t.tm_mon  = mo - 1;
+                    t.tm_mday = d;
+                    t.tm_hour = h;
+                    t.tm_min  = mi;
+                    t.tm_sec  = s;
+                    hw_rtc_set_tm(t);
+                    Serial.printf("[TIME] RTC set: "
+                                  "%04d-%02d-%02d %02d:%02d:%02d\n",
+                                  y, mo, d, h, mi, s);
+                } else {
+                    Serial.println("[TIME] bad payload");
+                }
+            }
+            len = 0;
+        } else if (len < sizeof(buf) - 1) {
+            buf[len++] = c;
+        } else {
+            len = 0;   // overflow — сбрасываем буфер
+        }
+    }
+}
+
 
 // ============================================================================
 //  setup / loop
@@ -193,6 +248,8 @@ void loop()
     static uint32_t last_db_flush = 0;
     static uint32_t last_pm_tick  = 0;
 
+    poll_serial_time_sync();
+
     CRASH_MARK("instance.loop");      instance.loop();
     CRASH_MARK("lv_task");            lv_task_handler();
     CRASH_MARK("power_manager.poll"); PowerManager::inst().poll();
@@ -213,3 +270,4 @@ void loop()
     BleService::inst().poll();
     delay(5);
 }
+

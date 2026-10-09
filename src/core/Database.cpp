@@ -22,6 +22,7 @@ void Database::_applyDefaults()
     strlcpy(_cfg.wifi_ssid, "JetLegacy_Bus", sizeof(_cfg.wifi_ssid));  // ←
     strlcpy(_cfg.wifi_pwd,  "50504022",      sizeof(_cfg.wifi_pwd));   // ←
     for (int i=0;i<5;i++) _cfg.alarms[i].enabled = false;
+    _cfg.face_idx = 0;
 }
 
 void Database::begin()
@@ -44,6 +45,7 @@ void Database::begin()
             _cfg.disp_timeout_s = doc["timeout"] | 15;
             _cfg.bt_on = doc["bt_on"] | true;
             _cfg.wifi_on = doc["wifi_on"] | false;
+            _cfg.face_idx = doc["face_idx"] | 0;
             strlcpy(_cfg.wifi_ssid, doc["wifi_ssid"] | "", sizeof(_cfg.wifi_ssid));
             strlcpy(_cfg.wifi_pwd,  doc["wifi_pwd"]  | "", sizeof(_cfg.wifi_pwd));
             JsonArray arr = doc["alarms"].as<JsonArray>();
@@ -80,6 +82,7 @@ void Database::saveConfig()
     doc["wifi_on"]   = _cfg.wifi_on;
     doc["wifi_ssid"] = _cfg.wifi_ssid;
     doc["wifi_pwd"]  = _cfg.wifi_pwd;
+    doc["face_idx"] = _cfg.face_idx;
 
     JsonArray al = doc["alarms"].to<JsonArray>();
     for (int i=0;i<5;i++) {

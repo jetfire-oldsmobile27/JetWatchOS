@@ -35,6 +35,7 @@ struct UserConfig {
     char wifi_pwd[65];
     bool wifi_on;
     AlarmEntry alarms[5];
+    uint8_t face_idx = 0;
 };
 
 class Database {

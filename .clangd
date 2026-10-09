@@ -1,26 +1,15 @@
 CompileFlags:
-  CompilationDatabase: .
+  Add:
+    - -ferror-limit=0
   Remove:
     - -mlongcalls
     - -mdisable-hardware-atomics
-    - -freorder-blocks
-    - -fstrict-volatile-bitfields
+    - -mfix-esp32-psram-cache-issue
+    - -mfix-esp32-psram-cache-strategy=*
     - -fno-tree-switch-conversion
+    - -fstrict-volatile-bitfields
     - -fno-jump-tables
     - -mtext-section-literals
-    - -fstack-protector
-    - -fstack-protector-strong
-    - -Werror=*
-    - -MMD
-    - --target=*                       # ← ДОБАВИТЬ ЭТУ СТРОКУ
-  Add:
-    - -Wno-unknown-warning-option
-    - -Wno-gnu-zero-variadic-macro-arguments
-    - -Wno-macro-redefined
-    - -Wno-unknown-attributes
-    - -Wno-invalid-pp-token
-    - -ferror-limit=0
-    - --query-driver=/home/jetfire27/.platformio/packages/toolchain-xtensa-esp-elf/bin/xtensa-esp32s3-elf-*
-
-Index:
-  Background: Build
+    - -fno-builtin-memcpy
+    - -fno-builtin-memset
+    - -fno-builtin-bzero

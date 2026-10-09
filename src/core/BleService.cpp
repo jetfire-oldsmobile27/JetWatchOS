@@ -250,7 +250,10 @@ void BleService::_handleLine(const char* s)
     else if (!strcmp(cmd, "time_sync")) {
         time_t ts = d["unix"] | 0;
         struct tm tm; gmtime_r(&ts, &tm);
-        hw_rtc_set_tm(tm);      // см. hw.h
+        if (hw_get_device_online() & HW_RTC_ONLINE) {
+            instance.rtc.convertUtcToTimezone(tm, GMT_OFFSET_SECOND);
+            instance.rtc.setDateTime(tm);
+        }
         JsonDocument r; reply(r, id, true);
     }
     else {
