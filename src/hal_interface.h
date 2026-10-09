@@ -520,6 +520,8 @@ void hw_set_wifi_connect(wifi_conn_params_t &params);
  */
 bool hw_get_wifi_connected();
 
+void hw_poll_wifi();
+
 /**
  * @brief Set the radio parameters.
  *
@@ -792,7 +794,7 @@ void hw_feedback();
  * This function is responsible for displaying a progress bar on the user interface
  * to indicate the status of the WiFi connection process.
  */
-void ui_show_wifi_process_bar();
+void ui_show_wifi_process_bar(); // @note no implemented
 
 /**
  * @brief Pop up a message box on the UI.
@@ -812,7 +814,7 @@ void ui_msg_pop_up(const char *title_txt, const char *msg_txt);
  *
  * @return True if the application is in the menu, false otherwise.
  */
-bool isinMenu();
+bool isinMenu(); // @note no implemented
 
 /**
  * @brief Get the user settings.

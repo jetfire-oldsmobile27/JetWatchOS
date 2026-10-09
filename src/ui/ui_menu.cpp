@@ -180,6 +180,17 @@ static void make_tile(lv_obj_t* tv, lv_group_t* g, int tile_col, int app_idx)
     lv_obj_align(l, LV_ALIGN_CENTER, 0, 56);
 }
 
+static void on_edge_prev(lv_event_t* e)
+{
+    MenuCtx* c = (MenuCtx*)lv_event_get_user_data(e);
+    menu_prev(c);
+}
+static void on_edge_next(lv_event_t* e)
+{
+    MenuCtx* c = (MenuCtx*)lv_event_get_user_data(e);
+    menu_next(c);
+}
+
 // ============================================================================
 lv_obj_t* ui_build_menu(lv_obj_t* parent, lv_group_t* g)
 {
@@ -257,6 +268,26 @@ lv_obj_t* ui_build_menu(lv_obj_t* parent, lv_group_t* g)
     lv_obj_add_event_cb(parent, [](lv_event_t* e){
         delete (MenuCtx*)lv_event_get_user_data(e);
     }, LV_EVENT_DELETE, ctx);
+
+    // ---- Невидимые edge-зоны 10% слева/справа: тап = листание ----
+    if (n > 1) {
+        auto make_edge = [&](bool left) {
+            lv_obj_t* e = lv_obj_create(parent);   // parent = menu tile
+            lv_obj_remove_style_all(e);
+            lv_obj_set_size(e, LV_PCT(10), LV_PCT(100));
+            lv_obj_align(e, left ? LV_ALIGN_LEFT_MID : LV_ALIGN_RIGHT_MID,
+                         0, 0);
+            lv_obj_add_flag(e, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_clear_flag(e, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_add_flag(e, LV_OBJ_FLAG_GESTURE_BUBBLE);
+            lv_obj_move_foreground(e);
+            lv_obj_add_event_cb(e,
+                left ? on_edge_prev : on_edge_next,
+                LV_EVENT_SHORT_CLICKED, ctx);
+        };
+        make_edge(true);    // левые 10%
+        make_edge(false);   // правые 10%
+    }
 
     // ---- статус-бар ----
     lv_obj_t* sb = ui_make_statusbar(parent);

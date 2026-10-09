@@ -4,6 +4,7 @@
 #include "core/PowerManager.h"
 #include "core/BleService.h"
 #include "core/Protocol.h"
+#include "core/GpsLog.h"
 #include <WiFi.h>
 #include <functional>
 
@@ -31,6 +32,11 @@ private:
     lv_obj_t* _ta      {nullptr};
     lv_obj_t* _slider_ov  {nullptr};
     lv_timer_t* _info_timer  {nullptr};
+
+    int _step_val = 0, _step_mn = 0, _step_mx = 0, _step_step = 1;
+    std::function<void(int)> _step_cb;
+    lv_obj_t* _step_val_lbl {nullptr};
+    bool _list_was_hidden{false};
 
     struct PwrLabels {
         lv_obj_t* charging   {nullptr};
@@ -100,18 +106,62 @@ private:
         });
 
         // ---------- Display (только value + >, без inline-слайдера) ----------
-        _row_value(_list, "Brightness", cfg.brightness, 0, 255,
-            [](int v){
-                Database::inst().config().brightness = v;
-                hw_set_disp_backlight(v);
-                Database::inst().saveConfig();
-            });
-        _row_value(_list, "Timeout", cfg.disp_timeout_s, 0, 180,
-            [](int v){
-                Database::inst().config().disp_timeout_s = v;
-                PowerManager::inst().setScreenTimeout(v * 1000UL);
-                Database::inst().saveConfig();
-            });
+        _row_value_stepper(_list, "Brightness", cfg.brightness, 0, 255, 5,
+        [](int v){
+            Database::inst().config().brightness = v;
+            hw_set_disp_backlight(v);
+            Database::inst().saveConfig();
+        });
+
+    _row_value_stepper(_list, "Timeout", cfg.disp_timeout_s, 0, 180, 5,
+        [](int v){
+            Database::inst().config().disp_timeout_s = v;
+            PowerManager::inst().setScreenTimeout(v * 1000UL);
+            Database::inst().saveConfig();
+        });
+
+        // ---------- GPS ----------
+        _row_value_stepper(_list, "Timezone", cfg.tz_offset_min, -720, 840, 30,
+        [](int v){
+            Database::inst().config().tz_offset_min = v;
+            Database::inst().saveConfig();
+        });
+
+        _row_switch(_list, "GPS", cfg.gps_on, [](bool v){
+            auto& c = Database::inst().config();
+            c.gps_on = v;
+            Database::inst().saveConfig();
+        });
+
+        _row_switch(_list, "Auto time sync", cfg.gps_time_sync, [](bool v){
+            auto& c = Database::inst().config();
+            c.gps_time_sync = v;
+            Database::inst().saveConfig();
+            if (!v) {
+                // сбросить флаг принудительного синка
+                extern bool gps_force_sync_once;
+                gps_force_sync_once = false;
+            }
+        });
+
+        _row_action(_list, "Sync time via GPS", ">", [](){
+            auto& cfg = Database::inst().config();
+            if (!cfg.gps_on) {
+                ui_msg_pop_up("GPS", "GPS is disabled in Settings");
+                return;
+            }
+            if (!(hw_get_device_online() & HW_GPS_ONLINE)) {
+                ui_msg_pop_up("GPS", "No GPS hardware");
+                return;
+            }
+            // Однократный форс
+            gps_params_t p{};
+            // выставляем флаг, чтобы hw_get_gps_info не решал "уже синкали"
+            extern bool gps_force_sync_once;   // см. hal_interface.cpp
+            gps_force_sync_once = true;
+            hw_get_gps_info(p);
+            ui_msg_pop_up("GPS", "Time sync requested — wait for fix");
+        });
 
         // ---------- Power info ----------
         _row_separator(_list, "POWER");
@@ -125,7 +175,10 @@ private:
         _row_info(_list, "Batt Percent", &_pwr.batt_pct);
 
         // ---------- Firmware ----------
+        _row_separator(_list, "DIAGNOSTICS");
+        _row_action(_list, "GPS Log", ">", [this](){ _open_gps_log(); });
         _row_separator(_list, "ABOUT");
+        
         _row_info(_list, "Firmware",     &_pwr.firmware);
 
         // ---------- Keyboard ----------
@@ -271,52 +324,56 @@ private:
     }
 
     void _row_text(lv_obj_t* parent, const char* name,
-                   const char* val, Field field)
+               const char* val, Field field)
     {
         lv_obj_t* row = lv_obj_create(parent);
         lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_size(row, LV_PCT(100), 40);
+        lv_obj_set_size(row, LV_PCT(100), 44);
         lv_obj_set_style_radius(row, 8, 0);
         lv_obj_set_style_bg_color(row, lv_color_hex(0x1F1F1F), 0);
         lv_obj_set_style_border_width(row, 0, 0);
         lv_obj_set_style_pad_hor(row, 10, 0);
         lv_obj_set_user_data(row, (void*)(intptr_t)field);
-        ui_make_label(row, &font_alibaba_24, lv_color_white(), name);
+        lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);   // ← вся строка кликабельна
 
-        // Правая половина кликабельна: «значение >»
-        lv_obj_t* hit = lv_obj_create(row);
-        lv_obj_set_size(hit, LV_PCT(55), LV_PCT(100));
-        lv_obj_align(hit, LV_ALIGN_RIGHT_MID, 0, 0);
-        lv_obj_set_style_bg_opa(hit, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(hit, 0, 0);
-        lv_obj_set_style_pad_all(hit, 0, 0);
-        lv_obj_clear_flag(hit, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_t* name_lbl = ui_make_label(row, &font_alibaba_24,
+                                        lv_color_white(), name);
+        lv_obj_set_width(name_lbl, LV_PCT(40));
+        lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_DOT);
+        lv_obj_align(name_lbl, LV_ALIGN_LEFT_MID, 0, 0);
 
-        lv_obj_t* lbl = ui_make_label(hit, &font_alibaba_24,
-                                      lv_color_hex(0xAAAAAA), val);
-        lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
-        lv_obj_t* chev = ui_make_label(hit, &font_alibaba_24,
-                                       lv_color_hex(0x666666), ">");
+        lv_obj_t* val_lbl = ui_make_label(row, &font_alibaba_24,
+                                        lv_color_hex(0xAAAAAA), val);
+        lv_obj_set_width(val_lbl, LV_PCT(48));
+        lv_label_set_long_mode(val_lbl, LV_LABEL_LONG_DOT);
+        lv_obj_align(val_lbl, LV_ALIGN_RIGHT_MID, -18, 0);
+        lv_obj_set_style_text_align(val_lbl, LV_TEXT_ALIGN_RIGHT, 0);
+
+        lv_obj_t* chev = ui_make_label(row, &font_alibaba_24,
+                                    lv_color_hex(0x666666), ">");
         lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
 
-        lv_obj_add_event_cb(hit, [](lv_event_t* e){
+        lv_obj_add_event_cb(row, [](lv_event_t* e){
             auto* s = (SettingsApp*)lv_event_get_user_data(e);
             if (s->_ta) return;
+            lv_obj_t* row = HW_EV_OBJ(e);
+            Field f = (Field)(intptr_t)lv_obj_get_user_data(row);
 
+            s->_list_was_hidden = true;
             lv_obj_add_flag(s->_list, LV_OBJ_FLAG_HIDDEN);
-
-            lv_obj_t* hit = HW_EV_OBJ(e);
-            lv_obj_t* row = lv_obj_get_parent(hit);
 
             s->_ta = lv_textarea_create(s->_parent);
             lv_obj_set_size(s->_ta, LV_PCT(90), 44);
             lv_obj_align(s->_ta, LV_ALIGN_TOP_MID, 0, 36);
             lv_textarea_set_one_line(s->_ta, true);
-            lv_textarea_set_text(s->_ta,
-                lv_label_get_text(lv_obj_get_child(hit, 0)));
-            lv_obj_set_user_data(s->_ta, lv_obj_get_user_data(row));
-            lv_obj_clear_flag(s->_ta, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_user_data(s->_ta, (void*)(intptr_t)f);
+
+            auto& cfg = Database::inst().config();
+            const char* cur =
+                f == FIELD_SSID ? cfg.wifi_ssid :
+                f == FIELD_PWD  ? cfg.wifi_pwd  :
+                                cfg.city;
+            lv_textarea_set_text(s->_ta, cur);
             lv_obj_move_foreground(s->_ta);
 
             lv_group_t* g = lv_group_get_default();
@@ -325,7 +382,34 @@ private:
             lv_obj_clear_flag(s->_kb, LV_OBJ_FLAG_HIDDEN);
             lv_obj_move_foreground(s->_kb);
             lv_keyboard_set_textarea(s->_kb, s->_ta);
-        }, LV_EVENT_SHORT_CLICKED, this); 
+        }, LV_EVENT_CLICKED, this);
+    }
+
+    void _row_action(lv_obj_t* parent, const char* name, const char* chevron,
+                 std::function<void()> cb)
+    {
+        lv_obj_t* row = lv_obj_create(parent);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(row, LV_PCT(100), 40);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_bg_color(row, lv_color_hex(0x1F1F1F), 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_hor(row, 10, 0);
+        lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+        ui_make_label(row, &font_alibaba_24, lv_color_white(), name);
+
+        lv_obj_t* chev = ui_make_label(row, &font_alibaba_24,
+                                    lv_color_hex(0x666666), chevron);
+        lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
+
+        auto* fn = new std::function<void()>(std::move(cb));
+        lv_obj_add_event_cb(row, [](lv_event_t* e){
+            auto* f = (std::function<void()>*)lv_event_get_user_data(e);
+            (*f)();
+        }, LV_EVENT_CLICKED, fn);
+        lv_obj_add_event_cb(row, [](lv_event_t* e){
+            delete (std::function<void()>*)lv_event_get_user_data(e);
+        }, LV_EVENT_DELETE, fn);
     }
 
     void _row_value(lv_obj_t* parent, const char* name,
@@ -380,11 +464,212 @@ private:
         }, LV_EVENT_DELETE, rc);
     }
 
+    void _row_value_stepper(lv_obj_t* parent, const char* name,
+                        int val, int mn, int mx, int step,
+                        std::function<void(int)> cb)
+    {
+        lv_obj_t* row = lv_obj_create(parent);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(row, LV_PCT(100), 44);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_bg_color(row, lv_color_hex(0x1F1F1F), 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_hor(row, 10, 0);
+        lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+
+        lv_obj_t* name_lbl = ui_make_label(row, &font_alibaba_24,
+                                        lv_color_white(), name);
+        lv_obj_set_width(name_lbl, LV_PCT(40));
+        lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_DOT);
+        lv_obj_align(name_lbl, LV_ALIGN_LEFT_MID, 0, 0);
+
+        lv_obj_t* val_lbl = ui_make_label(row, &font_alibaba_24,
+                                        lv_color_hex(0xAAAAAA), "");
+        lv_label_set_text_fmt(val_lbl, "%d", val);
+        lv_obj_set_width(val_lbl, LV_PCT(48));
+        lv_label_set_long_mode(val_lbl, LV_LABEL_LONG_DOT);
+        lv_obj_align(val_lbl, LV_ALIGN_RIGHT_MID, -18, 0);
+        lv_obj_set_style_text_align(val_lbl, LV_TEXT_ALIGN_RIGHT, 0);
+
+        lv_obj_t* chev = ui_make_label(row, &font_alibaba_24,
+                                    lv_color_hex(0x666666), ">");
+        lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
+
+        struct Ctx {
+            SettingsApp* app;
+            const char* title;
+            int mn, mx, step, val;
+            std::function<void(int)> cb;
+        };
+        auto* ctx = new Ctx{this, name, mn, mx, step, val, cb};
+
+        lv_obj_add_event_cb(row, [](lv_event_t* e){
+            auto* c = (Ctx*)lv_event_get_user_data(e);
+            c->app->_open_stepper(c->title, c->mn, c->mx, c->val,
+                                c->step, c->cb);
+        }, LV_EVENT_CLICKED, ctx);
+
+        lv_obj_add_event_cb(row, [](lv_event_t* e){
+            delete (Ctx*)lv_event_get_user_data(e);
+        }, LV_EVENT_DELETE, ctx);
+    }
+
     // ------------------------------------------------------------------
     //  Полноэкранный вертикальный слайдер
     // ------------------------------------------------------------------
     void _open_slider(const char* title, int mn, int mx, int val,
-                      std::function<void(int)> cb)
+                  std::function<void(int)> cb)
+    {
+        if (_slider_ov) return;
+
+        lv_obj_add_flag(_list, LV_OBJ_FLAG_HIDDEN);
+        if (_kb) lv_obj_add_flag(_kb, LV_OBJ_FLAG_HIDDEN);
+
+        // ---------- modal overlay ----------
+        lv_obj_t* ov = lv_obj_create(_parent);
+        lv_obj_set_size(ov, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_style_bg_color(ov, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(ov, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(ov, 0, 0);
+        lv_obj_set_style_radius(ov, 0, 0);
+        lv_obj_set_style_pad_all(ov, 0, 0);
+        lv_obj_align(ov, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_clear_flag(ov, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(ov, LV_OBJ_FLAG_CLICKABLE);  // глотает тапы вне виджетов
+        lv_obj_move_foreground(ov);
+        _slider_ov = ov;
+
+        // ---------- заголовок ----------
+        lv_obj_t* t = ui_make_label(ov, &font_alibaba_24, lv_color_white(), title);
+        lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 8);
+
+        // ---------- текущее значение ----------
+        lv_obj_t* v = ui_make_label(ov, &font_alibaba_60, lv_color_white(), "");
+        lv_label_set_text_fmt(v, "%d", val);
+        lv_obj_align(v, LV_ALIGN_TOP_MID, 0, 35);
+
+        // ---------- вертикальный слайдер ----------
+        // В LVGL 9 ориентация = AUTO по умолчанию: height > width → вертикальный.
+        // 40x80 умещается в зазор между value (…96) и OK (184…228).
+        lv_obj_t* sl = lv_slider_create(ov);
+        lv_obj_set_size(sl, 40, 80);
+        lv_obj_align(sl, LV_ALIGN_CENTER, 0, 20);
+        lv_slider_set_range(sl, mn, mx);
+        lv_slider_set_value(sl, val, LV_ANIM_OFF);
+
+        // ---------- OK ----------
+        lv_obj_t* ok = ui_make_btn(ov, "OK", nullptr, nullptr, 140, 42);
+        lv_obj_align(ok, LV_ALIGN_BOTTOM_MID, 0, -12);
+        lv_obj_move_foreground(ok);   // гарантированно поверх всего в ov
+
+        // ---------- контекст ----------
+        struct SlCtx {
+            std::function<void(int)> cb;
+            lv_obj_t* val_lbl;
+            lv_obj_t* overlay;
+            SettingsApp* app;
+        };
+        auto* c = new SlCtx{std::move(cb), v, ov, this};
+
+        lv_obj_add_event_cb(sl, [](lv_event_t* e){
+            auto* c = (SlCtx*)lv_event_get_user_data(e);
+            int value = lv_slider_get_value(HW_EV_OBJ(e));
+            lv_label_set_text_fmt(c->val_lbl, "%d", value);
+            if (c->cb) c->cb(value);
+        }, LV_EVENT_VALUE_CHANGED, c);
+
+        lv_obj_add_event_cb(ok, [](lv_event_t* e){
+            auto* c = (SlCtx*)lv_event_get_user_data(e);
+            UI_OBJ_DEL(c->overlay);
+            c->app->_slider_ov = nullptr;
+            SettingsApp* app = c->app;
+            delete c;
+            lv_async_call([](void* p){
+                ((SettingsApp*)p)->_build();
+            }, app);
+        }, LV_EVENT_CLICKED, c);
+    }
+
+    void _open_stepper(const char* title, int mn, int mx, int val, int step,
+                   std::function<void(int)> cb)
+    {
+        if (_slider_ov) return;
+
+        _step_val  = val;
+        _step_mn   = mn;  
+        _step_mx   = mx;
+        _step_step = step ? step : 1;
+        _step_cb   = std::move(cb);
+
+        lv_obj_add_flag(_list, LV_OBJ_FLAG_HIDDEN);
+        if (_kb) lv_obj_add_flag(_kb, LV_OBJ_FLAG_HIDDEN);
+
+        // ——— overlay ———
+        lv_obj_t* ov = lv_obj_create(_parent);
+        lv_obj_set_size(ov, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_style_bg_color(ov, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(ov, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(ov, 0, 0);
+        lv_obj_set_style_radius(ov, 0, 0);
+        lv_obj_set_style_pad_all(ov, 0, 0);
+        lv_obj_clear_flag(ov, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(ov, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_move_foreground(ov);
+        _slider_ov = ov;
+
+        // ——— заголовок ———
+        lv_obj_t* t = ui_make_label(ov, &font_alibaba_24, lv_color_white(), title);
+        lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 12);
+
+        // ——— текущее значение ———
+        lv_obj_t* v = ui_make_label(ov, &font_alibaba_60, lv_color_white(), "");
+        lv_label_set_text_fmt(v, "%d", _step_val);
+        lv_obj_align(v, LV_ALIGN_CENTER, 0, -60);
+        _step_val_lbl = v;
+
+        // ——— кнопки − и + ———
+        auto mk = [&](const char* sym, lv_align_t align, lv_coord_t dx, int delta){
+            lv_obj_t* b = lv_btn_create(ov);
+            lv_obj_set_size(b, 110, 110);
+            lv_obj_set_style_radius(b, 24, 0);
+            lv_obj_set_style_bg_color(b, lv_color_hex(0x2A2A2A), 0);
+            lv_obj_set_style_bg_color(b, lv_color_hex(0x3A3A3A), LV_STATE_PRESSED);
+            lv_obj_set_style_shadow_width(b, 0, 0);
+            lv_obj_align(b, LV_ALIGN_CENTER, dx, 60);
+            lv_obj_add_event_cb(b, [](lv_event_t* e){
+                auto* s = (SettingsApp*)lv_event_get_user_data(e);
+                int d = (int)(intptr_t)lv_obj_get_user_data(HW_EV_OBJ(e));
+                s->_step_val += d;
+                if (s->_step_val < s->_step_mn) s->_step_val = s->_step_mn;
+                if (s->_step_val > s->_step_mx) s->_step_val = s->_step_mx;
+                lv_label_set_text_fmt(s->_step_val_lbl, "%d", s->_step_val);
+                if (s->_step_cb) s->_step_cb(s->_step_val);
+            }, LV_EVENT_CLICKED, this);
+            lv_obj_set_user_data(b, (void*)(intptr_t)delta);
+
+            lv_obj_t* l = lv_label_create(b);
+            lv_label_set_text(l, sym);
+            lv_obj_set_style_text_font(l, &font_alibaba_60, 0);
+            lv_obj_set_style_text_color(l, lv_color_white(), 0);
+            lv_obj_center(l);
+        };
+        mk(LV_SYMBOL_MINUS, LV_ALIGN_CENTER, -80, -_step_step);
+        mk(LV_SYMBOL_PLUS,  LV_ALIGN_CENTER,  80,  _step_step);
+
+        // ——— OK ———
+        lv_obj_t* ok = ui_make_btn(ov, "OK", nullptr, nullptr, 180, 52);
+        lv_obj_align(ok, LV_ALIGN_BOTTOM_MID, 0, -16);
+        lv_obj_add_event_cb(ok, [](lv_event_t* e){
+            auto* s = (SettingsApp*)lv_event_get_user_data(e);
+            UI_OBJ_DEL(s->_slider_ov);
+            s->_slider_ov = nullptr;
+            s->_step_val_lbl = nullptr;
+            s->_step_cb = nullptr;
+            lv_async_call([](void* p){ ((SettingsApp*)p)->_build(); }, s);
+        }, LV_EVENT_CLICKED, this);
+    }
+
+    void _open_gps_log()
     {
         if (_slider_ov) return;
 
@@ -400,54 +685,51 @@ private:
         lv_obj_set_style_pad_all(ov, 0, 0);
         lv_obj_align(ov, LV_ALIGN_CENTER, 0, 0);
         lv_obj_clear_flag(ov, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(ov, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_move_foreground(ov);
         _slider_ov = ov;
 
-        // Заголовок
-        lv_obj_t* t = ui_make_label(ov, &font_alibaba_24, lv_color_white(), title);
-        lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 40);
+        lv_obj_t* t = ui_make_label(ov, &font_alibaba_24, lv_color_white(), "GPS Log");
+        lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 6);
 
-        // Текущее значение
-        lv_obj_t* v = ui_make_label(ov, &font_alibaba_60, lv_color_white(), "");
-        lv_label_set_text_fmt(v, "%d", val);
-        lv_obj_align(v, LV_ALIGN_TOP_MID, 0, 80);
+        lv_obj_t* list = lv_obj_create(ov);
+        lv_obj_set_size(list, LV_PCT(100), LV_PCT(100) - 76);
+        lv_obj_align(list, LV_ALIGN_TOP_MID, 0, 34);
+        lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(list, 0, 0);
+        lv_obj_set_style_pad_all(list, 4, 0);
+        lv_obj_set_style_pad_row(list, 2, 0);
+        lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
 
-        // Вертикальный слайдер (LVGL сам сделает вертикальным по размеру)
-        lv_obj_t* sl = lv_slider_create(ov);
-        lv_obj_set_size(sl, 44, 220);
-        lv_obj_align(sl, LV_ALIGN_CENTER, 0, 60);
-        lv_slider_set_range(sl, mn, mx);
-        lv_slider_set_value(sl, val, LV_ANIM_OFF);
+        if (gpslog::count() == 0) {
+            const char* msg = (hw_get_device_online() & HW_GPS_ONLINE)
+                            ? "no events yet"
+                            : "No GPS hardware";
+            ui_make_label(list, &font_alibaba_12, lv_color_hex(0x888888), msg);
+        } else {
+            for (int i = 0; i < gpslog::count(); ++i) {
+                const auto& e = gpslog::at(i);
+                uint32_t sec = e.ms / 1000;
+                lv_obj_t* l = ui_make_label(list, &font_alibaba_12,
+                                            lv_color_hex(0xCCCCCC), "");
+                lv_label_set_text_fmt(l, "[%02u:%02u]  %s",
+                                    (sec / 60) % 100, sec % 60, e.text);
+                lv_obj_set_width(l, LV_PCT(100));
+            }
+        }
 
-        // Кнопка «OK» — закрыть и вернуться к списку
-        lv_obj_t* ok = ui_make_btn(ov, "OK", nullptr, nullptr, 160, 52);
-        lv_obj_align(ok, LV_ALIGN_BOTTOM_MID, 0, -30);
-
-        struct SlCtx {
-            std::function<void(int)> cb;
-            lv_obj_t* val_lbl;
-            lv_obj_t* overlay;
-            SettingsApp* app;
-        };
-        auto* c = new SlCtx{cb, v, ov, this};
-
-        lv_obj_add_event_cb(sl, [](lv_event_t* e){
-            auto* c = (SlCtx*)lv_event_get_user_data(e);
-            int value = lv_slider_get_value(HW_EV_OBJ(e));
-            lv_label_set_text_fmt(c->val_lbl, "%d", value);
-            c->cb(value);
-        }, LV_EVENT_VALUE_CHANGED, c);
-
+        lv_obj_t* ok = ui_make_btn(ov, "OK", nullptr, nullptr, 140, 42);
+        lv_obj_align(ok, LV_ALIGN_BOTTOM_MID, 0, -12);
+        lv_obj_move_foreground(ok);
         lv_obj_add_event_cb(ok, [](lv_event_t* e){
-            auto* c = (SlCtx*)lv_event_get_user_data(e);
-            UI_OBJ_DEL(c->overlay);
-            c->app->_slider_ov =nullptr;
-            SettingsApp* app = c->app;
-            delete c;
+            SettingsApp* s = (SettingsApp*)lv_event_get_user_data(e);
+            UI_OBJ_DEL(s->_slider_ov);
+            s->_slider_ov = nullptr;
             lv_async_call([](void* p){
                 ((SettingsApp*)p)->_build();
-            }, app);
-        }, LV_EVENT_CLICKED, c);
+            }, s);
+        }, LV_EVENT_CLICKED, this);
     }
 };
 

@@ -19,3 +19,11 @@ static inline void hw_rtc_set_tm(const struct tm& t) {
 #else
   #define HW_EV_OBJ(e)  lv_event_get_target(e)
 #endif
+
+static inline void hw_set_display_power(bool on)
+{
+#ifdef ARDUINO
+    if (on) instance.wakeupDisplay();
+    else    instance.sleepDisplay();
+#endif
+}

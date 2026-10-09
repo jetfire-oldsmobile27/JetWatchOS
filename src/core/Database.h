@@ -36,6 +36,9 @@ struct UserConfig {
     bool wifi_on;
     AlarmEntry alarms[5];
     uint8_t face_idx = 0;
+    bool    gps_on        = true;
+    bool    gps_time_sync = false;   
+    int16_t tz_offset_min = 180; // +3:00
 };
 
 class Database {

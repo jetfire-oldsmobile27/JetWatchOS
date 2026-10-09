@@ -251,8 +251,14 @@ void BleService::_handleLine(const char* s)
         time_t ts = d["unix"] | 0;
         struct tm tm; gmtime_r(&ts, &tm);
         if (hw_get_device_online() & HW_RTC_ONLINE) {
-            instance.rtc.convertUtcToTimezone(tm, GMT_OFFSET_SECOND);
-            instance.rtc.setDateTime(tm);
+            auto& cfg = Database::inst().config();
+            time_t t = mktime(&tm);          // tm уже UTC
+            t += cfg.tz_offset_min * 60;
+            struct tm local;
+            gmtime_r(&t, &local);
+            instance.rtc.setDateTime(
+                local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+                local.tm_hour, local.tm_min, local.tm_sec);
         }
         JsonDocument r; reply(r, id, true);
     }

@@ -9,6 +9,7 @@
 #include "core/Database.h"
 #include "core/BleService.h"
 #include "core/Protocol.h"
+#include "core/GpsLog.h"
 #include "apps/apps.h"
 
 #include <expected>
@@ -212,6 +213,7 @@ void setup()
 
     Database::inst().begin();
     crash_persist();
+    gpslog::begin();
     PowerManager::inst().begin();
     register_apps();
     AppManager::inst().begin();
@@ -249,6 +251,8 @@ void loop()
     static uint32_t last_pm_tick  = 0;
 
     poll_serial_time_sync();
+    gpslog::poll();
+    hw_poll_wifi();
 
     CRASH_MARK("instance.loop");      instance.loop();
     CRASH_MARK("lv_task");            lv_task_handler();

@@ -9,11 +9,13 @@
 #include "hal_interface.h"
 #include <math.h>
 #include <lvgl.h>
+#include "core/Database.h"  
 
 #ifndef USING_RADIO_NAME
 #define USING_RADIO_NAME "N/A"
 #endif
 
+bool gps_force_sync_once = false;
 
 #define NVS_NAME    "pager"
 static user_setting_params_t user_setting;
@@ -721,6 +723,42 @@ void hw_init()
 
 }
 
+void ui_msg_pop_up(const char *title_txt, const char *msg_txt)
+{
+#ifdef ARDUINO
+    static lv_obj_t* s_popup = nullptr;
+    if (s_popup) { lv_obj_del(s_popup); s_popup = nullptr; }
+
+    s_popup = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(s_popup, LV_PCT(80), LV_SIZE_CONTENT);
+    lv_obj_align(s_popup, LV_ALIGN_TOP_MID, 0, 30);
+    lv_obj_set_style_bg_color(s_popup, lv_color_hex(0x2A2A2A), 0);
+    lv_obj_set_style_bg_opa(s_popup, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_popup, 0, 0);
+    lv_obj_set_style_radius(s_popup, 12, 0);
+    lv_obj_set_style_pad_all(s_popup, 10, 0);
+    lv_obj_set_flex_flow(s_popup, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_popup, 4, 0);
+    lv_obj_clear_flag(s_popup, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* t = lv_label_create(s_popup);
+    lv_label_set_text(t, title_txt);
+    lv_obj_set_style_text_color(t, lv_color_white(), 0);
+
+    lv_obj_t* m = lv_label_create(s_popup);
+    lv_label_set_text(m, msg_txt);
+    lv_obj_set_style_text_color(m, lv_color_hex(0xCCCCCC), 0);
+    lv_obj_set_width(m, LV_PCT(100));
+    lv_label_set_long_mode(m, LV_LABEL_LONG_WRAP);
+
+    lv_timer_t* timer = lv_timer_create([](lv_timer_t* tt){
+        if (s_popup) { lv_obj_del(s_popup); s_popup = nullptr; }
+        lv_timer_del(tt);
+    }, 2500, nullptr);
+    lv_timer_set_repeat_count(timer, 1);
+#endif
+}
+
 void hw_get_user_setting(user_setting_params_t &param)
 {
     param = user_setting;
@@ -943,6 +981,10 @@ void hw_gps_detach_pps()
 bool hw_get_gps_info(gps_params_t &param)
 {
 #ifdef ARDUINO
+    auto& cfg = Database::inst().config();
+    if(!cfg.gps_on) {
+        return false;
+    }
     static uint32_t interval = 0;
     param.pps = pps_trigger;
 
@@ -971,9 +1013,9 @@ bool hw_get_gps_info(gps_params_t &param)
         param.lng = instance.gps.location.lng();
         param.speed = instance.gps.speed.kmph();
     }
-
+    extern bool gps_force_sync_once;
     if (datetime) {
-        if (!sync_date_time) {
+        if (gps_force_sync_once || (cfg.gps_time_sync && !sync_date_time)) {
             sync_date_time = true;
             struct tm utc_tm = {0};
             time_t utc_timestamp;
@@ -984,10 +1026,18 @@ bool hw_get_gps_info(gps_params_t &param)
             utc_tm.tm_hour = instance.gps.time.hour();
             utc_tm.tm_min = instance.gps.time.minute();
             utc_tm.tm_sec = instance.gps.time.second();
+
+            time_t t = mktime(&utc_tm);
+            t += cfg.tz_offset_min * 60;      
+            struct tm local;
+            gmtime_r(&t, &local);
             if (hw_get_device_online() & HW_RTC_ONLINE) {
-                instance.rtc.convertUtcToTimezone(utc_tm, GMT_OFFSET_SECOND);
-                instance.rtc.setDateTime(utc_tm);
+                instance.rtc.setDateTime(local.tm_year + 1900, local.tm_mon + 1, local.tm_mday, local.tm_hour, local.tm_min, local.tm_sec);
                 instance.rtc.hwClockRead();
+                Serial.printf("[GPS] RTC <= %04d-%02d-%02d %02d:%02d:%02d (tz=%d min)\n",
+                            local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+                            local.tm_hour, local.tm_min, local.tm_sec,
+                            cfg.tz_offset_min);
             }
         }
         param.datetime.tm_year = instance.gps.date.year() - 1900;
@@ -1140,14 +1190,27 @@ void hw_get_wifi_scan_result(vector < wifi_scan_params_t > &list)
 
 void hw_set_wifi_connect(wifi_conn_params_t &params)
 {
-    printf("hw_set_wifi_connect:ssid:<%s> password <%s>\n", params.ssid.c_str(), params.password.c_str());
-#ifdef ARDUINO
     String ssid = params.ssid.c_str();
     String password = params.password.c_str();
-    Serial.print("SSID :"); Serial.println(ssid);
-    Serial.print("PWD :"); Serial.println(password);
-    WiFi.begin(ssid, password);
-#endif
+
+    Serial.printf("[WiFi] connect: ssid='%s' pwd_len=%u\n",
+                  ssid.c_str(), (unsigned)password.length());
+
+    if (ssid.isEmpty()) {
+        Serial.println("[WiFi] SSID is empty, abort");
+        return;
+    }
+
+    WiFi.persistent(false);
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.disconnect(true, false);   // сбросить старую попытку
+    delay(50);
+    WiFi.begin(ssid.c_str(), password.c_str());
+
+    static uint32_t s_t0 = 0;
+    s_t0 = millis();
+    Serial.printf("[WiFi] begin() called, waiting...\n");
 }
 
 bool hw_get_wifi_connected()
@@ -1156,6 +1219,51 @@ bool hw_get_wifi_connected()
     return WiFi.isConnected();
 #endif
     return false;
+}
+
+void hw_poll_wifi()
+{
+#ifdef ARDUINO
+    static wl_status_t last       = WL_IDLE_STATUS;
+    static uint32_t    last_log   = 0;
+    static uint32_t    t_start    = 0;
+
+    wl_status_t cur = WiFi.status();
+
+    if (cur != last) {
+        Serial.printf("[WiFi] state: %d -> %d\n", (int)last, (int)cur);
+        switch (cur) {
+            case WL_CONNECTED:
+                Serial.printf("[WiFi] CONNECTED  ip=%s  rssi=%d  ch=%d\n",
+                              WiFi.localIP().toString().c_str(),
+                              WiFi.RSSI(), WiFi.channel());
+                break;
+            case WL_NO_SSID_AVAIL:
+                Serial.println("[WiFi] SSID not found (check name or band 2.4GHz only)");
+                break;
+            case WL_CONNECT_FAILED:
+                Serial.println("[WiFi] Auth failed (wrong password?)");
+                break;
+            case WL_DISCONNECTED:
+                Serial.println("[WiFi] Disconnected");
+                break;
+            default: break;
+        }
+        last = cur;
+        if (cur == WL_CONNECTED) t_start = millis();
+    }
+
+    if (cur == WL_IDLE_STATUS || cur == WL_DISCONNECTED) {
+        if (t_start == 0) t_start = millis();
+        if (millis() - t_start > 20000 && millis() - last_log > 5000) {
+            last_log = millis();
+            Serial.printf("[WiFi] still not connected after %lus, status=%d\n",
+                          (millis() - t_start) / 1000, (int)cur);
+        }
+    } else {
+        t_start = 0;
+    }
+#endif
 }
 
 #ifdef ARDUINO

@@ -21,18 +21,38 @@ void PowerManager::screenOff()
     if (_screen_off) return;
     _screen_off = true;
     hw_set_disp_backlight(0);
+
+    // Спать самому ST7789 (SLPIN 0x10) — экономит ещё 5–10 мА
+    hw_set_display_power(false);
+
+    // Стоп рендера, но НЕ инпута
+    lv_display_t* d = lv_display_get_default();
+    if (d) {
+        lv_timer_t* t = lv_display_get_refr_timer(d);
+        if (t) lv_timer_pause(t);
+    }
+    setCpuFrequencyMhz(80);
 }
 
 void PowerManager::wake()
 {
     if (!_screen_off) return;
     _screen_off = false;
-    // съесть касание, разбудившее экран, чтобы оно не нажало кнопку под пальцем
+
+    lv_display_t* d = lv_display_get_default();
+    if (d) {
+        lv_timer_t* t = lv_display_get_refr_timer(d);
+        if (t) lv_timer_resume(t);
+    }
+
+    hw_set_display_power(true);
     for (lv_indev_t* i = lv_indev_get_next(nullptr); i; i = lv_indev_get_next(i))
         lv_indev_wait_release(i);
+
     hw_set_disp_backlight(_low_state ? LOW_BATT_BRIGHTNESS
                                      : Database::inst().config().brightness);
     UI_TRIGGER_ACTIVITY();
+    setCpuFrequencyMhz(240);
 }
 
 // Дёргать на каждой итерации loop(): касание тоже будит
