@@ -88,7 +88,9 @@ void FaceManager::begin()
     {
         Entry e;
         strlcpy(e.name, "Default", sizeof(e.name));
-        e.source     = lv_obj_create(nullptr);   // создаём отдельный screen как «хранилище»
+        e.source = lv_obj_create(lv_screen_active());
+        lv_obj_set_size(e.source, 240, 240);
+        lv_obj_add_flag(e.source, LV_OBJ_FLAG_HIDDEN);
         e.preview    = nullptr;
         e.update     = nullptr;
         e.def_update = face_default_update;

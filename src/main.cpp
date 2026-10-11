@@ -1,4 +1,4 @@
-#include "hal/hw.h"        // ← первым
+#include "hal/hw.h"     
 
 #include <LV_Helper.h>
 #include <FFat.h>
@@ -6,6 +6,7 @@
 #include "ui/ui_common.h"
 #include "core/AppManager.h"
 #include "core/PowerManager.h"
+#include "core/AlarmManager.h"
 #include "core/Database.h"
 #include "core/BleService.h"
 #include "core/Protocol.h"
@@ -210,8 +211,16 @@ void setup()
 
     instance.begin();
     beginLvglHelper(instance);
+    // lv_display_t* d = lv_display_get_default();
+    // Serial.printf("[LVGL] %dx%d  buf=%p  size=%u  render_mode=%d\n",
+    //           lv_display_get_horizontal_resolution(d),
+    //           lv_display_get_vertical_resolution(d),
+    //           lv_display_get_buf_active(d)->buf1,
+    //           lv_display_get_buf_active(d)->size,
+    //           lv_display_get_render_mode(d));
 
     Database::inst().begin();
+    AlarmManager::inst().begin();
     crash_persist();
     gpslog::begin();
     PowerManager::inst().begin();
@@ -242,6 +251,13 @@ void setup()
     instance.onEvent(on_pmu_event, POWER_EVENT, nullptr);
     hw_set_disp_backlight(cfg.brightness);
     PowerManager::inst().resetActivity();
+
+    xTaskCreatePinnedToCore([](void*){
+        while(true) {
+            gpslog::poll();
+            vTaskDelay(pdMS_TO_TICKS(2000));
+        }
+    }, "gpslog", 20 * 1024, nullptr, 3, nullptr, 1);
 }
 
 
@@ -251,7 +267,6 @@ void loop()
     static uint32_t last_pm_tick  = 0;
 
     poll_serial_time_sync();
-    gpslog::poll();
     hw_poll_wifi();
 
     CRASH_MARK("instance.loop");      instance.loop();
@@ -264,6 +279,7 @@ void loop()
     if (now - last_pm_tick > 1000) {
         last_pm_tick = now;
         PowerManager::inst().tick();
+        AlarmManager::inst().tick();
     }
     if (now - last_db_flush > 60000) {
         last_db_flush = now;

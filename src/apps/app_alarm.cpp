@@ -1,22 +1,25 @@
 #include "apps.h"
 #include "ui/ui_common.h"
 #include "core/Database.h"
+#include "AppTask.h"
 
 class AlarmApp final : public App {
 public:
     const char* name() const override { return "Alarm"; }
 
-    void onEnter(lv_obj_t* parent) override {
-        ui_make_screen(parent);
-        ui_make_statusbar(parent);
-        _parent = parent;
-        _build();
-    }
+    void onEnter(lv_obj_t* parent) override { _parent = parent; _build(); }
+    void onExit() override {}
 
 private:
-    lv_obj_t* _parent  {nullptr};
+    lv_obj_t* _parent{nullptr};
 
-    void _build() {
+    struct RowCtx {
+        int       idx;
+        lv_obj_t* lbl;
+    };
+
+    void _build()
+    {
         lv_obj_clean(_parent);
         ui_make_screen(_parent);
         ui_make_statusbar(_parent);
@@ -33,6 +36,7 @@ private:
         auto& cfg = Database::inst().config();
         for (int i = 0; i < 5; i++) {
             auto& a = cfg.alarms[i];
+
             lv_obj_t* row = lv_obj_create(list);
             lv_obj_set_size(row, LV_PCT(100), 44);
             lv_obj_set_style_bg_color(row, lv_color_hex(0x1F1F1F), 0);
@@ -43,22 +47,34 @@ private:
                                   LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
             lv_obj_set_style_pad_hor(row, 8, 0);
 
-            lv_obj_t* lbl = ui_make_label(row, &font_alibaba_24, lv_color_white(), "");
+            lv_obj_t* lbl = ui_make_label(row, &font_alibaba_24,
+                                          lv_color_white(), "");
             lv_label_set_text_fmt(lbl, "%02d:%02d  %s",
                                   a.hour, a.minute, a.enabled ? "ON" : "off");
 
-            lv_obj_t* b = ui_make_btn(row, "+1h", cb_add, (void*)(intptr_t)i, 60, 32);
-            (void)b;
+            lv_obj_t* btn = ui_make_btn(row, "+1h", nullptr, nullptr, 60, 32);
+
+            auto* ctx = new RowCtx{ i, lbl };
+            lv_obj_add_event_cb(btn, cb_add, LV_EVENT_CLICKED, ctx);
+            lv_obj_add_event_cb(btn, [](lv_event_t* e){
+                delete static_cast<RowCtx*>(lv_event_get_user_data(e));
+            }, LV_EVENT_DELETE, ctx);
         }
     }
 
-    static void cb_add(lv_event_t* e) {
-        int i = (int)(intptr_t)lv_event_get_user_data(e);
-        auto& a = Database::inst().config().alarms[i];
+    static void cb_add(lv_event_t* e)
+    {
+        auto* ctx = static_cast<RowCtx*>(lv_event_get_user_data(e));
+        auto& a = Database::inst().config().alarms[ctx->idx];
         a.hour = (a.hour + 1) % 24;
         if (a.hour == 0) a.enabled = !a.enabled;
-        Database::inst().saveConfig();
-        
+
+        // Мгновенный отклик
+        lv_label_set_text_fmt(ctx->lbl, "%02d:%02d  %s",
+                              a.hour, a.minute, a.enabled ? "ON" : "off");
+
+        // Сохранение — в фоне
+        apptask_run_detached([]() { Database::inst().saveConfig(); });
     }
 };
 

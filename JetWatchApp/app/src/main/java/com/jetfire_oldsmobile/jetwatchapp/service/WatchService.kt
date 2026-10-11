@@ -35,6 +35,7 @@ class WatchService : Service() {
             this, 1, build(WatchHub.state.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         )
         AppLog.i("SERVICE", "started")
+        WatchHub.stopLoop()
         WatchHub.startLoop()
         obs?.cancel()
         obs = WatchHub.scope.launch {

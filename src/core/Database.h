@@ -39,6 +39,7 @@ struct UserConfig {
     bool    gps_on        = true;
     bool    gps_time_sync = false;   
     int16_t tz_offset_min = 180; // +3:00
+    bool sounds_on = true;
 };
 
 class Database {

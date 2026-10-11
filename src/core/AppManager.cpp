@@ -126,9 +126,9 @@ void AppManager::tick()
 
 void AppManager::_closeCurrent()
 {
-    if (_tick_timer) { lv_timer_del(_tick_timer); _tick_timer= nullptr; }
+    if (_tick_timer) { lv_timer_del(_tick_timer); _tick_timer = nullptr; }
     if (_current) { _current->onExit(); _current.reset(); }
-    if (_app_layer)  { UI_OBJ_DEL(_app_layer); _app_layer =nullptr; }
+    if (_app_layer) { UI_OBJ_DEL(_app_layer); _app_layer = nullptr; }
 }
 void AppManager::_schedule(State s)
 {

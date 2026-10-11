@@ -723,41 +723,41 @@ void hw_init()
 
 }
 
-void ui_msg_pop_up(const char *title_txt, const char *msg_txt)
-{
-#ifdef ARDUINO
-    static lv_obj_t* s_popup = nullptr;
-    if (s_popup) { lv_obj_del(s_popup); s_popup = nullptr; }
+// void ui_msg_pop_up(const char *title_txt, const char *msg_txt)
+// {
+// #ifdef ARDUINO
+//     static lv_obj_t* s_popup = nullptr;
+//     if (s_popup) { lv_obj_del(s_popup); s_popup = nullptr; }
 
-    s_popup = lv_obj_create(lv_layer_top());
-    lv_obj_set_size(s_popup, LV_PCT(80), LV_SIZE_CONTENT);
-    lv_obj_align(s_popup, LV_ALIGN_TOP_MID, 0, 30);
-    lv_obj_set_style_bg_color(s_popup, lv_color_hex(0x2A2A2A), 0);
-    lv_obj_set_style_bg_opa(s_popup, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(s_popup, 0, 0);
-    lv_obj_set_style_radius(s_popup, 12, 0);
-    lv_obj_set_style_pad_all(s_popup, 10, 0);
-    lv_obj_set_flex_flow(s_popup, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(s_popup, 4, 0);
-    lv_obj_clear_flag(s_popup, LV_OBJ_FLAG_SCROLLABLE);
+//     s_popup = lv_obj_create(lv_layer_top());
+//     lv_obj_set_size(s_popup, LV_PCT(80), LV_SIZE_CONTENT);
+//     lv_obj_align(s_popup, LV_ALIGN_TOP_MID, 0, 30);
+//     lv_obj_set_style_bg_color(s_popup, lv_color_hex(0x2A2A2A), 0);
+//     lv_obj_set_style_bg_opa(s_popup, LV_OPA_COVER, 0);
+//     lv_obj_set_style_border_width(s_popup, 0, 0);
+//     lv_obj_set_style_radius(s_popup, 12, 0);
+//     lv_obj_set_style_pad_all(s_popup, 10, 0);
+//     lv_obj_set_flex_flow(s_popup, LV_FLEX_FLOW_COLUMN);
+//     lv_obj_set_style_pad_row(s_popup, 4, 0);
+//     lv_obj_clear_flag(s_popup, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t* t = lv_label_create(s_popup);
-    lv_label_set_text(t, title_txt);
-    lv_obj_set_style_text_color(t, lv_color_white(), 0);
+//     lv_obj_t* t = lv_label_create(s_popup);
+//     lv_label_set_text(t, title_txt);
+//     lv_obj_set_style_text_color(t, lv_color_white(), 0);
 
-    lv_obj_t* m = lv_label_create(s_popup);
-    lv_label_set_text(m, msg_txt);
-    lv_obj_set_style_text_color(m, lv_color_hex(0xCCCCCC), 0);
-    lv_obj_set_width(m, LV_PCT(100));
-    lv_label_set_long_mode(m, LV_LABEL_LONG_WRAP);
+//     lv_obj_t* m = lv_label_create(s_popup);
+//     lv_label_set_text(m, msg_txt);
+//     lv_obj_set_style_text_color(m, lv_color_hex(0xCCCCCC), 0);
+//     lv_obj_set_width(m, LV_PCT(100));
+//     lv_label_set_long_mode(m, LV_LABEL_LONG_WRAP);
 
-    lv_timer_t* timer = lv_timer_create([](lv_timer_t* tt){
-        if (s_popup) { lv_obj_del(s_popup); s_popup = nullptr; }
-        lv_timer_del(tt);
-    }, 2500, nullptr);
-    lv_timer_set_repeat_count(timer, 1);
-#endif
-}
+//     lv_timer_t* timer = lv_timer_create([](lv_timer_t* tt){
+//         if (s_popup) { lv_obj_del(s_popup); s_popup = nullptr; }
+//         lv_timer_del(tt);
+//     }, 2500, nullptr);
+//     lv_timer_set_repeat_count(timer, 1);
+// #endif
+// }
 
 void hw_get_user_setting(user_setting_params_t &param)
 {
@@ -1646,14 +1646,22 @@ void hw_get_monitor_params(monitor_params_t &params)
         params.ntc_state = "Normal";
     }
 #elif defined(USING_PMU_MANAGE)
-    params.type = MONITOR_PMU;
-    params.charge_state = instance.pmu.isCharging() ? "Charging" : "Not charging";
-    params.usb_voltage = instance.pmu.getVbusVoltage();
-    params.sys_voltage = instance.pmu.getSystemVoltage();
+    params.type              = MONITOR_PMU;
+    params.battery_present   = instance.pmu.isBatteryConnect();
+    params.is_charging       = instance.pmu.isCharging();
+    params.charge_current_ma = params.is_charging
+                                ? (int16_t)instance.getChargeCurrent()
+                                : 0;
+
+    int raw_pct = instance.pmu.getBatteryPercent();
+    params.battery_percent = (raw_pct < 0) ? 0 : raw_pct;
+
+    params.charge_state    = params.is_charging ? "Charging" : "Not charging";
+    params.usb_voltage     = instance.pmu.getVbusVoltage();
+    params.sys_voltage     = instance.pmu.getSystemVoltage();
     params.battery_voltage = instance.pmu.getBattVoltage();
-    params.battery_percent = instance.pmu.getBatteryPercent();
-    params.temperature = instance.pmu.getTemperature();
-    params.ntc_state = "Normal"; //TODO:
+    params.temperature     = instance.pmu.getTemperature();
+    params.ntc_state       = "Normal";
 #endif
 
 #ifdef USING_BQ_GAUGE

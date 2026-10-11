@@ -61,11 +61,21 @@ void PowerManager::poll()
     if (_screen_off && UI_INACTIVE_MS() < 200) wake();
 }
 
-void PowerManager::tick()   // раз в секунду
+void PowerManager::tick()  
 {
-    monitor_params_t mp; hw_get_monitor_params(mp);
+    monitor_params_t mp;
+    hw_get_monitor_params(mp);
     _batt_pct = mp.battery_percent;
 
+    // --- Детектор старта/остановки зарядки ---
+    bool now_chg = mp.is_charging && mp.battery_present;
+    if (now_chg && !_was_charging) {
+        charging_overlay_show();
+    }
+    _was_charging = now_chg;
+    _had_battery  = mp.battery_present;
+
+    // --- Low-battery подсветка ---
     if (_batt_pct < 20 && !_low_state) {
         _low_state = true;
         if (!_screen_off) hw_set_disp_backlight(LOW_BATT_BRIGHTNESS);
@@ -74,6 +84,7 @@ void PowerManager::tick()   // раз в секунду
         if (!_screen_off) hw_set_disp_backlight(Database::inst().config().brightness);
     }
 
+    // --- Таймаут экрана ---
     if (!_screen_off && _timeout_ms > 0 && UI_INACTIVE_MS() > _timeout_ms)
         screenOff();
 }

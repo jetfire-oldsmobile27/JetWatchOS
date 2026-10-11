@@ -36,4 +36,6 @@ private:
     bool     _bt_active     = false;
     bool     _low_state     = false;
     bool     _screen_off    = false;  
+    bool     _was_charging  = false;
+    bool     _had_battery   = false;
 };

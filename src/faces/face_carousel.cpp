@@ -11,9 +11,9 @@ static int       s_count    = 0;
 
 static void update_dots();
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------
 //  Один тайл карусели
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------
 static void make_tile(lv_obj_t* tv, int tile_col, int face_idx)
 {
     const auto& e = FaceManager::inst().at(face_idx);
@@ -36,23 +36,21 @@ static void make_tile(lv_obj_t* tv, int tile_col, int face_idx)
     lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_set_style_border_width(btn, 0, 0);
     lv_obj_set_style_outline_width(btn, 0, 0);
-    lv_obj_set_style_outline_width(btn, 0, LV_STATE_FOCUSED);
-    lv_obj_set_style_outline_width(btn, 0, LV_STATE_FOCUS_KEY);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_add_event_cb(btn, [](lv_event_t* e){
-        int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    // CLICKED — надёжнее SHORT_CLICKED на тайлвью
+    lv_obj_add_event_cb(btn, [](lv_event_t* ev){
+        int idx = (int)(intptr_t)lv_event_get_user_data(ev);
         FaceManager::inst().select(idx, true);
         PowerManager::inst().resetActivity();
         face_carousel_hide();
-    }, LV_EVENT_SHORT_CLICKED, (void*)(intptr_t)face_idx);
+    }, LV_EVENT_CLICKED, (void*)(intptr_t)face_idx);
 
     if (e.preview) {
         lv_obj_t* img = UI_IMG_CREATE(btn);
         UI_IMG_SET_SRC(img, e.preview);
         lv_obj_align(img, LV_ALIGN_CENTER, 0, -20);
     } else {
-        // Placeholder — круг с инициалом
         lv_obj_t* ph = lv_obj_create(btn);
         lv_obj_set_size(ph, 160, 160);
         lv_obj_align(ph, LV_ALIGN_CENTER, 0, -20);
@@ -60,21 +58,18 @@ static void make_tile(lv_obj_t* tv, int tile_col, int face_idx)
         lv_obj_set_style_bg_color(ph, lv_color_hex(0x333333), 0);
         lv_obj_set_style_border_width(ph, 0, 0);
         lv_obj_clear_flag(ph, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_t* ini = ui_make_label(ph, &font_alibaba_60,
-                                      lv_color_white(),
+        lv_obj_t* ini = ui_make_label(ph, F_HERO, lv_color_white(),
                                       e.name[0] ? "D" : "?");
         lv_obj_center(ini);
     }
 
-    lv_obj_t* lbl = ui_make_label(btn, &font_alibaba_24,
-                                  lv_color_white(), e.name);
+    lv_obj_t* lbl = ui_make_label(btn, F_TITLE, lv_color_white(), e.name);
     lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 80);
 }
 
-
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------
 //  show / hide
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------
 void face_carousel_show()
 {
     if (s_overlay) return;
@@ -86,13 +81,11 @@ void face_carousel_show()
     if (s_cur < 0 || s_cur >= s_count) s_cur = 0;
 
     s_overlay = lv_obj_create(UI_SCR_ACT());
+    lv_obj_remove_style_all(s_overlay);
     lv_obj_set_size(s_overlay, LV_PCT(100), LV_PCT(100));
     lv_obj_center(s_overlay);
     lv_obj_set_style_bg_color(s_overlay, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(s_overlay, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(s_overlay, 0, 0);
-    lv_obj_set_style_radius(s_overlay, 0, 0);
-    lv_obj_set_style_pad_all(s_overlay, 0, 0);
     lv_obj_clear_flag(s_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_move_foreground(s_overlay);
 
@@ -120,17 +113,34 @@ void face_carousel_show()
     lv_obj_set_flex_align(dots, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(dots, LV_OBJ_FLAG_SCROLLABLE);
-
     for (int i = 0; i < s_count; ++i) {
         lv_obj_t* d = lv_obj_create(dots);
+        lv_obj_remove_style_all(d);
         lv_obj_set_size(d, 6, 6);
         lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(d, lv_color_hex(0x444444), 0);
-        lv_obj_set_style_border_width(d, 0, 0);
+        lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
         lv_obj_clear_flag(d, LV_OBJ_FLAG_SCROLLABLE);
         s_dots[i] = d;
     }
     lv_obj_move_foreground(dots);
+
+    // ---- КНОПКА ЗАКРЫТИЯ (обязательно!) ----
+    lv_obj_t* close_btn = lv_btn_create(s_overlay);
+    lv_obj_set_size(close_btn, 34, 34);
+    lv_obj_align(close_btn, LV_ALIGN_TOP_RIGHT, -6, 6);
+    lv_obj_set_style_radius(close_btn, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x2A2A2A), 0);
+    lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x3A3A3A), LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(close_btn, 0, 0);
+    lv_obj_set_style_shadow_width(close_btn, 0, 0);
+    lv_obj_move_foreground(close_btn);
+    lv_obj_add_event_cb(close_btn, [](lv_event_t*){
+        face_carousel_hide();
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* x = lv_label_create(close_btn);
+    lv_label_set_text(x, LV_SYMBOL_CLOSE);
+    lv_obj_center(x);
 
     lv_obj_update_layout(s_tv);
     lv_coord_t w = lv_obj_get_width(s_tv);
@@ -140,9 +150,9 @@ void face_carousel_show()
     lv_obj_add_event_cb(s_tv, [](lv_event_t*){
         if (!s_tv) return;
         lv_coord_t ww = lv_obj_get_width(s_tv);
-        lv_coord_t x  = lv_obj_get_scroll_x(s_tv);
+        lv_coord_t xx = lv_obj_get_scroll_x(s_tv);
         if (ww <= 0) return;
-        int col = (x + ww / 2) / ww;
+        int col = (xx + ww / 2) / ww;
         if (col < 0) col = 0;
         if (col >= s_count) col = s_count - 1;
         if (col != s_cur) { s_cur = col; update_dots(); }
@@ -151,9 +161,9 @@ void face_carousel_show()
     lv_obj_add_event_cb(s_tv, [](lv_event_t*){
         if (!s_tv) return;
         lv_coord_t ww = lv_obj_get_width(s_tv);
-        lv_coord_t x  = lv_obj_get_scroll_x(s_tv);
+        lv_coord_t xx = lv_obj_get_scroll_x(s_tv);
         if (ww <= 0) return;
-        int col = (x + ww / 2) / ww;
+        int col = (xx + ww / 2) / ww;
         if (col < 0) col = 0;
         if (col >= s_count) col = s_count - 1;
         s_cur = col;
@@ -164,10 +174,15 @@ void face_carousel_show()
 void face_carousel_hide()
 {
     if (!s_overlay) return;
-    UI_OBJ_DEL(s_overlay);
+    lv_obj_t* ov = s_overlay;
+    // Сбрасываем указатели ДО удаления, чтобы поздние события
+    // не лезли в освобождённую память.
     s_overlay = nullptr;
     s_tv      = nullptr;
     for (int i = 0; i < 32; ++i) s_dots[i] = nullptr;
+
+    // async — можно безопасно вызывать из обработчика дочернего объекта
+    UI_OBJ_DEL_ASYNC(ov);
 }
 
 bool face_carousel_is_open() { return s_overlay != nullptr; }
@@ -178,7 +193,12 @@ static void update_dots()
         bool active = (i == s_cur);
         lv_obj_set_style_bg_color(s_dots[i],
             active ? lv_color_white() : lv_color_hex(0x444444), 0);
-        lv_obj_set_style_width (s_dots[i], active ? 8 : 6, 0);
-        lv_obj_set_style_height(s_dots[i], active ? 8 : 6, 0);
+        if (active) {
+            lv_obj_set_width(s_dots[i], 14);
+            lv_obj_set_style_radius(s_dots[i], 3, 0);
+        } else {
+            lv_obj_set_width(s_dots[i], 6);
+            lv_obj_set_style_radius(s_dots[i], LV_RADIUS_CIRCLE, 0);
+        }
     }
 }

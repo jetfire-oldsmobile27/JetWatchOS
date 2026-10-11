@@ -9,12 +9,15 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Build
 import android.os.ParcelUuid
+import com.jetfire_oldsmobile.jetwatchapp.hub.WatchHub
 import com.jetfire_oldsmobile.jetwatchapp.log.AppLog
 import com.jetfire_oldsmobile.jetwatchapp.proto.Proto
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
@@ -51,6 +54,14 @@ class WatchBle(private val ctx: Context) {
     private val nextId = AtomicInteger(1)
     private val inBuf = ByteArrayOutputStream()
 
+    
+    private fun refreshGattCache(dev: BluetoothDevice) {
+        runCatching {
+            val m = dev.javaClass.getMethod("refresh")
+            m.invoke(dev)
+        }
+    }
+
     /** address == null -> scan by name/service. */
     suspend fun connect(address: String?): Boolean = connectMutex.withLock {
         if (_conn.value == Conn.Ready) return@withLock true
@@ -61,24 +72,19 @@ class WatchBle(private val ctx: Context) {
             return@withLock false
         }
         val dev = if (address != null) adapter.getRemoteDevice(address) else scan(adapter)
-        if (dev == null) {
-            AppLog.w("BLE", "watch not found")
-            _conn.value = Conn.Disconnected
-            return@withLock false
-        }
-        AppLog.i("BLE", "connecting to ${dev.address}")
+        if (dev == null) { _conn.value = Conn.Disconnected; return@withLock false }
+
+        // важно: убрать stale gatt
+        refreshGattCache(dev)
+        delay(200)
+
         _conn.value = Conn.Connecting
         val r = CompletableDeferred<Boolean>()
         ready = r
         gatt = dev.connectGatt(ctx, false, callback, BluetoothDevice.TRANSPORT_LE)
         val ok = withTimeoutOrNull(15_000) { r.await() } ?: false
-        if (ok) {
-            deviceAddress = dev.address
-            AppLog.i("BLE", "ready, mtu=$mtu")
-        } else {
-            AppLog.w("BLE", "connect failed/timeout")
-            closeGatt()
-        }
+        if (ok) { deviceAddress = dev.address; AppLog.i("BLE", "ready, mtu=$mtu") }
+        else    { AppLog.w("BLE", "connect failed/timeout"); closeGatt() }
         ok
     }
 
@@ -106,13 +112,12 @@ class WatchBle(private val ctx: Context) {
     }
 
     private fun closeGatt() {
-        val g = gatt
-        gatt = null
-        rx = null
+        val g = gatt; gatt = null; rx = null
         runCatching { g?.disconnect() }
         runCatching { g?.close() }
         _conn.value = Conn.Disconnected
         ready?.complete(false)
+        ready = null                       
         failPending()
     }
 
@@ -199,7 +204,14 @@ class WatchBle(private val ctx: Context) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 if (!g.requestMtu(247)) g.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                if (g === gatt) closeGatt() else runCatching { g.close() }
+                if (g === gatt) { closeGatt() } else runCatching { g.close() }
+                // автопереподключение через 3 c, если сервис ещё работает
+                if (WatchHub.state.value.serviceRunning) {
+                    WatchHub.scope.launch {
+                        delay(3000)
+                        if (WatchHub.state.value.serviceRunning) WatchHub.connectNow()
+                    }
+                }
             }
         }
 

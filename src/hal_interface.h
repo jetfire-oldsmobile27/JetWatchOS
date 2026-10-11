@@ -222,14 +222,18 @@ typedef struct {
     float    temperature;       // Celsius
     uint16_t remainingCapacity; // mAh
     uint16_t fullChargeCapacity;// mAh
-    uint16_t designCapacity;    //mAh
+    uint16_t designCapacity;    // mAh
     int16_t  instantaneousCurrent;   // mA
     int16_t  standbyCurrent;     // mA
-    int16_t  averagePower;      //mW
-    int16_t  maxLoadCurrent;    //mA
+    int16_t  averagePower;      // mW
+    int16_t  maxLoadCurrent;    // mA
     uint16_t timeToEmpty;       // minute
     uint16_t timeToFull;        // minute
-    string ntc_state;
+    string   ntc_state;
+
+    bool     is_charging;        // true, если идёт заряд
+    bool     battery_present;    // false, если PMU не видит батарею
+    int16_t  charge_current_ma;  // фактический ток заряда, mA (положительный)
 } monitor_params_t;
 
 /**

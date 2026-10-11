@@ -44,6 +44,7 @@ static RxCB s_rx_cb;
 void BleService::begin(const char* name)
 {
     NimBLEDevice::init(name);
+    NimBLEDevice::setMTU(247);
     s_srv = NimBLEDevice::createServer();
 
     auto* svc = s_srv->createService(proto::SERVICE_UUID);
@@ -219,6 +220,7 @@ void BleService::_handleLine(const char* s)
     else if (!strcmp(cmd, "notify")) {
         extern void app_notifications_push(const char*, const char*, const char*);
         app_notifications_push(d["app"] | "App", d["title"] | "", d["body"] | "");
+        // @todo: сохранять pkg/ico для будущего UI иконок
         JsonDocument r; reply(r, id, true);
     }
     else if (!strcmp(cmd, "steps")) {
@@ -244,24 +246,22 @@ void BleService::_handleLine(const char* s)
         reply(r, id, true);
     }
     else if (!strcmp(cmd, "training_clear")) {
-        db.trainingClear(d["id"] | 0);
+        db.trainingClear(d["tid"] | 0);
         JsonDocument r; reply(r, id, true);
     }
     else if (!strcmp(cmd, "time_sync")) {
-        time_t ts = d["unix"] | 0;
-        struct tm tm; gmtime_r(&ts, &tm);
-        if (hw_get_device_online() & HW_RTC_ONLINE) {
-            auto& cfg = Database::inst().config();
-            time_t t = mktime(&tm);          // tm уже UTC
-            t += cfg.tz_offset_min * 60;
-            struct tm local;
-            gmtime_r(&t, &local);
-            instance.rtc.setDateTime(
-                local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
-                local.tm_hour, local.tm_min, local.tm_sec);
-        }
-        JsonDocument r; reply(r, id, true);
+    time_t ts = d["unix"] | 0;
+    int tz_min = d["tz"] | 0;                  // минуты, знак как в POSIX
+    struct tm tm; gmtime_r(&ts, &tm);
+    time_t t = mktime(&tm) + tz_min * 60;
+    struct tm local; gmtime_r(&t, &local);
+    if (hw_get_device_online() & HW_RTC_ONLINE) {
+        instance.rtc.setDateTime(
+            local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+            local.tm_hour, local.tm_min, local.tm_sec);
     }
+    JsonDocument r; reply(r, id, true);
+}
     else {
         JsonDocument r; r["err"] = "unknown cmd";
         reply(r, id, false);

@@ -26,6 +26,7 @@ void Database::_applyDefaults()
     _cfg.tz_offset_min = 180;
     for (int i=0;i<5;i++) _cfg.alarms[i].enabled = false;
     _cfg.face_idx = 0;
+    _cfg.sounds_on = true;
 }
 
 void Database::begin()
@@ -54,6 +55,7 @@ void Database::begin()
             _cfg.gps_on        = doc["gps_on"]        | _cfg.gps_on;
             _cfg.gps_time_sync = doc["gps_time_sync"] | _cfg.gps_time_sync;
             _cfg.tz_offset_min = doc["tz_offset_min"] | _cfg.tz_offset_min;
+            _cfg.sounds_on = doc["sounds_on"] | _cfg.sounds_on;
             JsonArray arr = doc["alarms"].as<JsonArray>();
             int i=0;
             for (JsonObject a : arr) {
@@ -92,6 +94,7 @@ void Database::saveConfig()
     doc["gps_on"]        = _cfg.gps_on;
     doc["gps_time_sync"] = _cfg.gps_time_sync;
     doc["tz_offset_min"] = _cfg.tz_offset_min;
+    doc["sounds_on"] = _cfg.sounds_on;
 
     JsonArray al = doc["alarms"].to<JsonArray>();
     for (int i=0;i<5;i++) {
