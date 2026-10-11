@@ -103,7 +103,7 @@ void apptask_run_detached(Work work)
 
     BaseType_t ok = xTaskCreatePinnedToCore(
         apptask_detail::detached_entry<W>,
-        "apptask", 20 * 1024, j, 5, nullptr, 1);
+        "apptask", 8 * 1024, j, 5, nullptr, 1);
 
     if (ok != pdPASS) {
         delete j;

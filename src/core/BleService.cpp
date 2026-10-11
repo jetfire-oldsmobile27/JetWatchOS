@@ -20,6 +20,22 @@ static QueueHandle_t s_q  {nullptr};
 
 void ble_set_active(bool on) { /* no-op, активность ведётся через PowerManager */ }
 
+class SrvCB : public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer* s, NimBLEConnInfo& info) override {
+        Serial.printf("[BLE] connected  addr=%s\n",
+                      info.getAddress().toString().c_str());
+        // Обновить connection parameters, если хочется:
+        // s->updateConnParams(info.getConnHandle(), 12, 24, 0, 400);
+    }
+
+    void onDisconnect(NimBLEServer* s, NimBLEConnInfo& info, int reason) override {
+        Serial.printf("[BLE] disconnected reason=%d, restart adv\n", reason);
+        // Без этой строки часы пропадают из эфира до перезагрузки
+        NimBLEDevice::startAdvertising();
+    }
+};
+static SrvCB s_srv_cb;
+
 BleService& BleService::inst() { static BleService m; return m; }
 
 class RxCB : public NimBLECharacteristicCallbacks {
@@ -46,6 +62,7 @@ void BleService::begin(const char* name)
     NimBLEDevice::init(name);
     NimBLEDevice::setMTU(247);
     s_srv = NimBLEDevice::createServer();
+    s_srv->setCallbacks(&s_srv_cb);
 
     auto* svc = s_srv->createService(proto::SERVICE_UUID);
     s_rx = svc->createCharacteristic(proto::RX_UUID,
@@ -65,8 +82,13 @@ void BleService::begin(const char* name)
 
 void BleService::end()
 {
-    NimBLEDevice::deinit(true);
+    if (s_srv) {
+        auto peers = s_srv->getPeerDevices();
+        for (auto h : peers) s_srv->disconnect(h);
+    }
+    NimBLEDevice::stopAdvertising();
     _active = false;
+    // НЕ deinit — оставляем стек живым, чтобы begin() снова работал
 }
 
 void BleService::_sendJson(JsonDocument& doc)

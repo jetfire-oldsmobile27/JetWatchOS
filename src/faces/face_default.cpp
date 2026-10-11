@@ -55,7 +55,7 @@ static void polar(int r, float deg,
 static lv_obj_t* new_line(lv_obj_t* parent, lv_color_t color, int w)
 {
     lv_obj_t* l = lv_line_create(parent);
-    lv_obj_set_size(parent, 240, 240);
+    //lv_obj_set_size(parent, 240, 240);
     lv_obj_set_style_pad_all(parent, 0, 0);
     lv_obj_set_style_line_width(l, w, 0);
     lv_obj_set_style_line_color(l, color, 0);
@@ -79,6 +79,7 @@ static void make_arc(lv_obj_t* parent, float deg_a, float deg_b,
 // ============================================================
 void face_default_build(lv_obj_t* parent)
 {
+    lv_obj_set_size(parent, 240, 240);
     // Родитель — жёсткий 240x240 канвас без скролла, паддингов, бордера.
     lv_obj_set_style_pad_all(parent, 0, 0);
     lv_obj_set_style_border_width(parent, 0, 0);
