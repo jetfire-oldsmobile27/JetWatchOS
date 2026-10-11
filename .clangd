@@ -1,0 +1,11 @@
+CompileFlags:
+  CompilationDatabase: .pio/build/twatchs3
+  Add:
+    - -std=gnu++23          # укажите стандарт, который использует ваш проект
+    - -DARDUINO_T_WATCH_S3  # добавьте ключевые макросы из platformio.ini
+    - -DARDUINO_LILYGO_LORA_SX1262
+    - -DESP32
+  Remove:
+    - -mlongcalls
+    - -fno-tree-switch-conversion
+    - -mtext-section-literals
