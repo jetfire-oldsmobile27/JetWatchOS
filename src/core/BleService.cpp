@@ -271,19 +271,30 @@ void BleService::_handleLine(const char* s)
         db.trainingClear(d["tid"] | 0);
         JsonDocument r; reply(r, id, true);
     }
-    else if (!strcmp(cmd, "time_sync")) {
-    time_t ts = d["unix"] | 0;
-    int tz_min = d["tz"] | 0;                  // минуты, знак как в POSIX
-    struct tm tm; gmtime_r(&ts, &tm);
-    time_t t = mktime(&tm) + tz_min * 60;
-    struct tm local; gmtime_r(&t, &local);
-    if (hw_get_device_online() & HW_RTC_ONLINE) {
-        instance.rtc.setDateTime(
-            local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
-            local.tm_hour, local.tm_min, local.tm_sec);
-    }
-    JsonDocument r; reply(r, id, true);
-}
+    // else if (!strcmp(cmd, "time_sync")) { // @todo broken!
+    //     time_t ts = (time_t)(uint32_t)(d["unix"] | 0u);
+    //     int tz_min = d["tz"] | (int)cfg.tz_offset_min;
+
+    //     time_t local_unix = ts + (time_t)tz_min * 60;
+    //     struct tm local;
+    //     gmtime_r(&local_unix, &local);
+
+    //     Serial.printf("[TIME] rx unix=%ld tz=%d -> %04d-%02d-%02d %02d:%02d:%02d\n",
+    //                 (long)ts, tz_min,
+    //                 local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+    //                 local.tm_hour, local.tm_min, local.tm_sec);
+
+    //     if (hw_get_device_online() & HW_RTC_ONLINE) {
+    //         instance.rtc.setDateTime(
+    //             local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+    //             local.tm_hour, local.tm_min, local.tm_sec);
+    //     }
+
+    //     JsonDocument r;
+    //     r["ok"]    = true;
+    //     r["local"] = (uint32_t)local_unix;
+    //     reply(r, id, true);
+    // }
     else {
         JsonDocument r; r["err"] = "unknown cmd";
         reply(r, id, false);
