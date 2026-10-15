@@ -13,11 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jetfire_oldsmobile.jetwatchapp.R
 import com.jetfire_oldsmobile.jetwatchapp.ui.WatchViewModel
 import com.jetfire_oldsmobile.jetwatchapp.ui.hasListener
 import kotlinx.coroutines.Dispatchers
@@ -52,20 +54,26 @@ fun AppsScreen(vm: WatchViewModel) {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Mirror notifications to watch", style = MaterialTheme.typography.titleMedium)
-                Text("${cfg.allowedPkgs.size} apps selected", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.apps_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.apps_selected, cfg.allowedPkgs.size), style = MaterialTheme.typography.bodySmall)
             }
             Switch(cfg.mirrorEnabled, { v -> vm.update { it.copy(mirrorEnabled = v) } })
         }
         if (!listenerOk) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Notification access is required.")
-                    Button(onClick = { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) { Text("Grant access") }
+                    Text(stringResource(R.string.apps_access))
+                    Button(onClick = { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) {
+                        Text(stringResource(R.string.apps_grant))
+                    }
                 }
             }
         }
-        OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Search apps") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            query, { query = it }, singleLine = true,
+            label = { Text(stringResource(R.string.apps_search)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
         LazyColumn(Modifier.fillMaxSize()) {
             items(shown, key = { it.pkg }) { app ->
                 val icon by produceState<ImageBitmap?>(null, app.pkg) {

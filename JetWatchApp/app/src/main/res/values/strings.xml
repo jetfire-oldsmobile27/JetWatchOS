@@ -1,3 +1,96 @@
 <resources>
-    <string name="app_name">JetWatchApp</string>
+    <string name="app_name">JetWatch</string>
+
+    <string name="tab_home">Today</string>
+    <string name="tab_control">Watch</string>
+    <string name="tab_apps">Notifications</string>
+
+    <string name="ch_service_name">Watch connection</string>
+    <string name="ch_service_desc">Keeps the watch connection alive</string>
+    <string name="ch_alerts_name">Watch alerts</string>
+    <string name="service_stop">Stop</string>
+
+    <string name="home_watch_title">Watch</string>
+    <string name="home_connected">Connected</string>
+    <string name="home_scanning">Searching…</string>
+    <string name="home_connecting">Connecting…</string>
+    <string name="home_disconnected">Disconnected</string>
+    <string name="home_battery">battery %1$d%%</string>
+    <string name="home_fw">fw %1$s</string>
+    <string name="home_last_sync_never">Last sync: never</string>
+    <string name="home_last_sync">Last sync: %1$s</string>
+    <string name="home_hc_today">Health Connect today: %1$d steps (all sources)</string>
+    <string name="home_sync_now">Sync now</string>
+    <string name="home_disconnect">Disconnect</string>
+    <string name="home_find_watch">Find watch</string>
+    <string name="home_connect">Connect</string>
+    <string name="home_bg_service">Background service</string>
+    <string name="home_open_log">Open service.log</string>
+    <string name="home_week_title">Last 7 days</string>
+    <string name="home_week_empty">No data yet</string>
+    <string name="home_workouts">Workouts</string>
+    <string name="home_setup">Setup</string>
+    <string name="home_allow_ble">Allow Bluetooth</string>
+    <string name="home_allow_notif">Allow notifications</string>
+    <string name="home_notif_access">Notification access (mirroring)</string>
+    <string name="home_allow_hc">Allow Health Connect</string>
+    <string name="home_hc_update">Health Connect needs an update.</string>
+    <string name="home_hc_unavailable">Health Connect is not available on this device.</string>
+    <string name="home_syncing">Syncing…</string>
+    <string name="home_of_goal">of %1$s steps</string>
+
+    <string name="stats_title">Statistics</string>
+
+    <string name="ctrl_display">Display</string>
+    <string name="ctrl_brightness">Brightness %1$d</string>
+    <string name="ctrl_timeout">Screen timeout</string>
+    <string name="ctrl_never">Never</string>
+    <string name="ctrl_wifi">Wi-Fi</string>
+    <string name="ctrl_ssid">SSID</string>
+    <string name="ctrl_password">Password</string>
+    <string name="ctrl_connect">Connect</string>
+    <string name="ctrl_wifi_off">Wi-Fi off</string>
+    <string name="ctrl_city">City / weather</string>
+    <string name="ctrl_name">Name</string>
+    <string name="ctrl_lat">Lat</string>
+    <string name="ctrl_lon">Lon</string>
+    <string name="ctrl_send">Send to watch</string>
+    <string name="ctrl_alarms">Alarms</string>
+    <string name="ctrl_alarm_none">No alarms loaded (connect and sync).</string>
+    <string name="ctrl_alarm_edit">Edit</string>
+    <string name="ctrl_alarm_add">Add alarm</string>
+    <string name="ctrl_alarm_once">Once</string>
+    <string name="ctrl_phone_to_watch">Phone → watch</string>
+    <string name="ctrl_test_notif">Send test notification</string>
+    <string name="ctrl_ping">Ping</string>
+    <string name="ctrl_time_sync">Sync time</string>
+    <string name="ctrl_bt_off">Turn watch Bluetooth off…</string>
+    <string name="ctrl_app_settings">App settings</string>
+    <string name="ctrl_goal">Daily goal: %1$d steps</string>
+    <string name="ctrl_sync_interval">Sync interval</string>
+    <string name="ctrl_min">%1$d min</string>
+    <string name="ctrl_clear_after">Erase workouts on watch after import</string>
+    <string name="ctrl_clear_all">Erase all workouts on watch</string>
+    <string name="ctrl_forget">Forget this watch</string>
+    <string name="ctrl_bt_off_title">Turn Bluetooth off?</string>
+    <string name="ctrl_bt_off_text">The watch will drop this connection and the phone won\'t be able to reconnect until you enable BLE on the watch.</string>
+    <string name="ctrl_bt_off_confirm">Turn off</string>
+    <string name="ctrl_cancel">Cancel</string>
+    <string name="ctrl_save">Save</string>
+
+    <string name="ctrl_power">Power</string>
+    <string name="ctrl_cpu">CPU frequency</string>
+    <string name="ctrl_saver">Battery saver</string>
+    <string name="ctrl_saver_on">Enable</string>
+    <string name="ctrl_saver_off">Disable</string>
+
+    <string name="apps_title">Mirror notifications to watch</string>
+    <string name="apps_selected">%1$d apps selected</string>
+    <string name="apps_access">Notification access is required.</string>
+    <string name="apps_grant">Grant access</string>
+    <string name="apps_search">Search apps</string>
+
+    <string name="log_title">service.log</string>
+    <string name="log_clear">Clear</string>
+    <string name="log_search">Search (%1$d lines)</string>
 </resources>

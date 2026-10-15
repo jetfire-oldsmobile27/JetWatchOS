@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jetfire_oldsmobile.jetwatchapp.R
 import com.jetfire_oldsmobile.jetwatchapp.log.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,7 +35,7 @@ fun LogScreen(onBack: () -> Unit) {
     var lines by remember { mutableStateOf(emptyList<String>()) }
     var query by remember { mutableStateOf("") }
     LaunchedEffect(ver) {
-        delay(300) // debounce bursts of writes
+        delay(300)
         lines = withContext(Dispatchers.IO) { AppLog.readTail(5000) }
     }
     val shown = remember(lines, query) { if (query.isBlank()) lines else lines.filter { it.contains(query, ignoreCase = true) } }
@@ -45,9 +47,9 @@ fun LogScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("service.log") },
+                title = { Text(stringResource(R.string.log_title)) },
                 navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                actions = { IconButton({ AppLog.clear() }) { Icon(Icons.Default.Delete, "Clear") } },
+                actions = { IconButton({ AppLog.clear() }) { Icon(Icons.Default.Delete, stringResource(R.string.log_clear)) } },
             )
         }
     ) { pad ->
@@ -55,12 +57,14 @@ fun LogScreen(onBack: () -> Unit) {
             OutlinedTextField(
                 query, { query = it }, singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, null) },
-                trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Icons.Default.Close, "Clear search") } },
-                placeholder = { Text("Search (${shown.size} lines)") },
+                trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Icons.Default.Close, null) } },
+                placeholder = { Text(stringResource(R.string.log_search, shown.size)) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             )
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = list) {
-                itemsIndexed(shown) { _, line -> Text(highlight(line, query), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 14.sp) }
+                itemsIndexed(shown) { _, line ->
+                    Text(highlight(line, query), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 14.sp)
+                }
             }
         }
     }
@@ -80,7 +84,9 @@ private fun highlight(line: String, q: String) = buildAnnotatedString {
                 val j = line.indexOf(q, i, ignoreCase = true)
                 if (j < 0) { append(line.substring(i)); break }
                 append(line.substring(i, j))
-                withStyle(SpanStyle(background = Color(0xFFFFEB3B), color = Color.Black)) { append(line.substring(j, j + q.length)) }
+                withStyle(SpanStyle(background = Color(0xFFFFEB3B), color = Color.Black)) {
+                    append(line.substring(j, j + q.length))
+                }
                 i = j + q.length
             }
         }

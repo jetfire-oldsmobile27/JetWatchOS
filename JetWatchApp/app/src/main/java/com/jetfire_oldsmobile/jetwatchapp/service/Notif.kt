@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.jetfire_oldsmobile.jetwatchapp.R
 
 object Notif {
     const val CH_SERVICE = "service"
@@ -15,11 +16,18 @@ object Notif {
 
     fun init(ctx: Context) {
         val nm = NotificationManagerCompat.from(ctx)
+        // IMPORTANCE_MIN: FGS остаётся валидным, но иконки в статус-баре нет.
         nm.createNotificationChannel(
-            NotificationChannelCompat.Builder(CH_SERVICE, NotificationManagerCompat.IMPORTANCE_LOW).setName("Watch connection").build()
+            NotificationChannelCompat.Builder(CH_SERVICE, NotificationManagerCompat.IMPORTANCE_MIN)
+                .setName(ctx.getString(R.string.ch_service_name))
+                .setDescription(ctx.getString(R.string.ch_service_desc))
+                .setShowBadge(false)
+                .build()
         )
         nm.createNotificationChannel(
-            NotificationChannelCompat.Builder(CH_ALERT, NotificationManagerCompat.IMPORTANCE_DEFAULT).setName("Watch alerts").build()
+            NotificationChannelCompat.Builder(CH_ALERT, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+                .setName(ctx.getString(R.string.ch_alerts_name))
+                .build()
         )
     }
 

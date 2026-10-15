@@ -11,8 +11,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.jetfire_oldsmobile.jetwatchapp.R
 import java.text.NumberFormat
 
 /** Circular steps indicator: spinning arc while syncing, goal progress otherwise. */
@@ -37,7 +39,8 @@ fun StepsRing(steps: Int, goal: Int, syncing: Boolean, modifier: Modifier = Modi
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(NumberFormat.getInstance().format(steps), style = MaterialTheme.typography.displayMedium)
             Text(
-                if (syncing) "Syncing…" else "of ${NumberFormat.getInstance().format(goal)} steps",
+                if (syncing) stringResource(R.string.home_syncing)
+                else stringResource(R.string.home_of_goal, NumberFormat.getInstance().format(goal)),
                 style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -46,7 +49,11 @@ fun StepsRing(steps: Int, goal: Int, syncing: Boolean, modifier: Modifier = Modi
 }
 
 @Composable
-fun SectionCard(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun SectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)

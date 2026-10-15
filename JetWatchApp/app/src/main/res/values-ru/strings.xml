@@ -1,0 +1,96 @@
+<resources>
+    <string name="app_name">JetWatch</string>
+
+    <string name="tab_home">Сегодня</string>
+    <string name="tab_control">Часы</string>
+    <string name="tab_apps">Уведомления</string>
+
+    <string name="ch_service_name">Связь с часами</string>
+    <string name="ch_service_desc">Поддерживает соединение с часами</string>
+    <string name="ch_alerts_name">Оповещения часов</string>
+    <string name="service_stop">Стоп</string>
+
+    <string name="home_watch_title">Часы</string>
+    <string name="home_connected">Подключено</string>
+    <string name="home_scanning">Поиск…</string>
+    <string name="home_connecting">Подключение…</string>
+    <string name="home_disconnected">Не подключено</string>
+    <string name="home_battery">заряд %1$d%%</string>
+    <string name="home_fw">прошивка %1$s</string>
+    <string name="home_last_sync_never">Синхронизация: никогда</string>
+    <string name="home_last_sync">Синхронизация: %1$s</string>
+    <string name="home_hc_today">Health Connect сегодня: %1$d шагов (все источники)</string>
+    <string name="home_sync_now">Синхронизировать</string>
+    <string name="home_disconnect">Отключить</string>
+    <string name="home_find_watch">Найти часы</string>
+    <string name="home_connect">Подключить</string>
+    <string name="home_bg_service">Фоновый сервис</string>
+    <string name="home_open_log">Открыть service.log</string>
+    <string name="home_week_title">Последние 7 дней</string>
+    <string name="home_week_empty">Пока нет данных</string>
+    <string name="home_workouts">Тренировки</string>
+    <string name="home_setup">Настройка</string>
+    <string name="home_allow_ble">Разрешить Bluetooth</string>
+    <string name="home_allow_notif">Разрешить уведомления</string>
+    <string name="home_notif_access">Доступ к уведомлениям (зеркалирование)</string>
+    <string name="home_allow_hc">Разрешить Health Connect</string>
+    <string name="home_hc_update">Требуется обновление Health Connect.</string>
+    <string name="home_hc_unavailable">Health Connect недоступен на этом устройстве.</string>
+    <string name="home_syncing">Синхронизация…</string>
+    <string name="home_of_goal">из %1$s шагов</string>
+
+    <string name="stats_title">Статистика</string>
+
+    <string name="ctrl_display">Экран</string>
+    <string name="ctrl_brightness">Яркость %1$d</string>
+    <string name="ctrl_timeout">Тайм-аут экрана</string>
+    <string name="ctrl_never">Никогда</string>
+    <string name="ctrl_wifi">Wi-Fi</string>
+    <string name="ctrl_ssid">SSID</string>
+    <string name="ctrl_password">Пароль</string>
+    <string name="ctrl_connect">Подключить</string>
+    <string name="ctrl_wifi_off">Выключить Wi-Fi</string>
+    <string name="ctrl_city">Город / погода</string>
+    <string name="ctrl_name">Название</string>
+    <string name="ctrl_lat">Широта</string>
+    <string name="ctrl_lon">Долгота</string>
+    <string name="ctrl_send">Отправить на часы</string>
+    <string name="ctrl_alarms">Будильники</string>
+    <string name="ctrl_alarm_none">Будильники не загружены (подключитесь и синхронизируйтесь).</string>
+    <string name="ctrl_alarm_edit">Изменить</string>
+    <string name="ctrl_alarm_add">Добавить будильник</string>
+    <string name="ctrl_alarm_once">Один раз</string>
+    <string name="ctrl_phone_to_watch">Телефон → часы</string>
+    <string name="ctrl_test_notif">Тестовое уведомление</string>
+    <string name="ctrl_ping">Пинг</string>
+    <string name="ctrl_time_sync">Синхронизировать время</string>
+    <string name="ctrl_bt_off">Выключить Bluetooth на часах…</string>
+    <string name="ctrl_app_settings">Настройки приложения</string>
+    <string name="ctrl_goal">Цель на день: %1$d шагов</string>
+    <string name="ctrl_sync_interval">Интервал синхронизации</string>
+    <string name="ctrl_min">%1$d мин</string>
+    <string name="ctrl_clear_after">Стирать тренировки на часах после импорта</string>
+    <string name="ctrl_clear_all">Стереть все тренировки на часах</string>
+    <string name="ctrl_forget">Забыть эти часы</string>
+    <string name="ctrl_bt_off_title">Выключить Bluetooth?</string>
+    <string name="ctrl_bt_off_text">Часы разорвут соединение, а телефон не сможет переподключиться, пока вы не включите BLE на часах.</string>
+    <string name="ctrl_bt_off_confirm">Выключить</string>
+    <string name="ctrl_cancel">Отмена</string>
+    <string name="ctrl_save">Сохранить</string>
+
+    <string name="ctrl_power">Питание</string>
+    <string name="ctrl_cpu">Частота ЦП</string>
+    <string name="ctrl_saver">Энергосбережение</string>
+    <string name="ctrl_saver_on">Включить</string>
+    <string name="ctrl_saver_off">Выключить</string>
+
+    <string name="apps_title">Зеркалировать уведомления на часы</string>
+    <string name="apps_selected">Выбрано приложений: %1$d</string>
+    <string name="apps_access">Нужен доступ к уведомлениям.</string>
+    <string name="apps_grant">Выдать доступ</string>
+    <string name="apps_search">Поиск приложений</string>
+
+    <string name="log_title">service.log</string>
+    <string name="log_clear">Очистить</string>
+    <string name="log_search">Поиск (строк: %1$d)</string>
+</resources>

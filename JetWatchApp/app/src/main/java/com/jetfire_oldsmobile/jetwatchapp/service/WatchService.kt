@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.jetfire_oldsmobile.jetwatchapp.MainActivity
+import com.jetfire_oldsmobile.jetwatchapp.R
 import com.jetfire_oldsmobile.jetwatchapp.ble.WatchBle
 import com.jetfire_oldsmobile.jetwatchapp.hub.WatchHub
 import com.jetfire_oldsmobile.jetwatchapp.hub.WatchState
@@ -55,10 +56,12 @@ class WatchService : Service() {
 
     private fun build(s: WatchState): Notification {
         val status = when (s.conn) {
-            WatchBle.Conn.Ready -> "Connected" + (s.battery?.let { " · $it%" } ?: "") + " · ${s.todaySteps} steps"
-            WatchBle.Conn.Scanning -> "Searching for watch…"
-            WatchBle.Conn.Connecting -> "Connecting…"
-            WatchBle.Conn.Disconnected -> "Disconnected, retrying"
+            WatchBle.Conn.Ready -> getString(R.string.home_connected) +
+                    (s.battery?.let { " · " + getString(R.string.home_battery, it) } ?: "") +
+                    " · ${s.todaySteps} steps"
+            WatchBle.Conn.Scanning -> getString(R.string.home_scanning)
+            WatchBle.Conn.Connecting -> getString(R.string.home_connecting)
+            WatchBle.Conn.Disconnected -> getString(R.string.home_disconnected)
         }
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
@@ -69,8 +72,15 @@ class WatchService : Service() {
         return NotificationCompat.Builder(this, Notif.CH_SERVICE)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentTitle("JetWatch").setContentText(status)
-            .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
-            .addAction(0, "Stop", stop).build()
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setContentIntent(open)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .addAction(0, getString(R.string.service_stop), stop)
+            .build()
     }
 
     companion object {

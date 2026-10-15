@@ -31,9 +31,22 @@ data class WatchState(
     val alarms: List<AlarmItem> = emptyList(),
     val hcStatus: HcStatus = HcStatus.NoPermission,
     val lastError: String? = null,
+    /** Локальная дата, к которой относятся накопленные счётчики. При смене дня сбрасываем. */
+    val stepsDate: String = LocalDate.now().toString(),
 ) {
+    /**
+     * Приоритет: телефон (Health Connect, все источники) → данные часов за сегодня → максимум из недели.
+     * Никогда не берём меньше уже накопленного за сегодня.
+     */
     val todaySteps: Int
-        get() = watchSteps ?: week.lastOrNull()?.steps ?: hcSteps.toInt()
+        get() {
+            val today = LocalDate.now().toString()
+            val stale = stepsDate != today
+            val fromWatch = if (stale) 0 else (watchSteps ?: 0)
+            val fromWeek = week.firstOrNull { it.ymd == today }?.steps ?: 0
+            val fromHc = hcSteps.toInt()
+            return maxOf(fromWatch, fromWeek, fromHc)
+        }
 }
 
 /** Process-wide singleton shared by UI, foreground service and notification listener. */
@@ -89,6 +102,13 @@ object WatchHub {
         AppLog.i("HUB", "loop started")
         while (currentCoroutineContext().isActive) {
             try {
+                // Смена суток: сбрасываем счётчики, чтобы не тащить вчерашнее.
+                val today = LocalDate.now().toString()
+                if (_state.value.stepsDate != today) {
+                    AppLog.i("HUB", "new day $today -> reset watch counters")
+                    _state.update { it.copy(stepsDate = today, watchSteps = null, hcSteps = 0) }
+                }
+
                 if (ble.conn.value != WatchBle.Conn.Ready) connectNow()
                 val s = settings.value
                 val due = System.currentTimeMillis() - state.value.lastSync > s.syncIntervalMin * 60_000L
@@ -132,18 +152,48 @@ object WatchHub {
             val zone = ZoneId.systemDefault()
             ble.request("time_sync", mapOf(
                 "unix" to System.currentTimeMillis() / 1000,
-                "tz" to zone.rules.getOffset(java.time.Instant.now()).totalSeconds, // extra field, see notes
+                "tz" to zone.rules.getOffset(java.time.Instant.now()).totalSeconds,
             ))
 
-            ble.request("steps", mapOf("days" to 7))?.takeIf { it.optBoolean("ok") }?.let { r ->
+            // 30 дней истории (в карточке показываем 7, в отдельном экране — все).
+            ble.request("steps", mapOf("days" to 30))?.takeIf { it.optBoolean("ok") }?.let { r ->
                 val days = r.daysList().sortedBy { it.ymd }
                 val today = LocalDate.now().toString()
+                val watchToday = days.firstOrNull { it.ymd == today }?.steps ?: 0
+
+                // Свежее значение из Health Connect (все источники, дедупликация уже сделана HC).
+                // Если фоновое чтение недоступно — берём то, что уже в стейте.
+                val hcTodayFresh = if (hcWritable)
+                    runCatching { hc.readTodaySteps() }.getOrDefault(-1L)
+                else -1L
+                val hcToday = if (hcTodayFresh >= 0) hcTodayFresh else _state.value.hcSteps
+
+                // Телефон — источник истины; часы только добавляют, если телефон молчит.
+                val totalToday = maxOf(hcToday, watchToday.toLong())
+
                 _state.update { st ->
-                    st.copy(week = days, watchSteps = days.firstOrNull { it.ymd == today }?.steps ?: st.watchSteps)
+                    val newDay = st.stepsDate != today
+                    val prevWatch = if (newDay) 0 else (st.watchSteps ?: 0)
+                    val prevHc = if (newDay) 0L else st.hcSteps
+                    st.copy(
+                        week = days,
+                        stepsDate = today,
+                        watchSteps = if (newDay) watchToday else maxOf(prevWatch, watchToday),
+                        hcSteps = if (newDay) totalToday else maxOf(prevHc, totalToday),
+                    )
                 }
-                if (hcWritable) days.forEach { d ->
-                    runCatching { hc.writeDailySteps(d.ymd, d.steps.toLong()) }
-                        .onFailure { AppLog.e("HC", "write steps ${d.ymd}", it) }
+
+                if (hcWritable) {
+                    // Сегодня пишем МАКСИМУМ, чтобы 0 с зависших часов не обнулил данные телефона.
+                    if (totalToday > 0) {
+                        runCatching { hc.writeDailySteps(today, totalToday) }
+                            .onFailure { AppLog.e("HC", "write steps $today", it) }
+                    }
+                    // Прошлые дни — только если там реально что-то есть.
+                    days.filter { it.ymd != today && it.steps > 0 }.forEach { d ->
+                        runCatching { hc.writeDailySteps(d.ymd, d.steps.toLong()) }
+                            .onFailure { AppLog.e("HC", "write steps ${d.ymd}", it) }
+                    }
                 } else AppLog.w("HC", "no Health Connect write permission, skipping steps write")
             }
 
@@ -160,7 +210,7 @@ object WatchHub {
             AppLog.e("HUB", "sync failed", e)
             _state.update { it.copy(lastError = e.message) }
         } finally {
-            val left = 900 - (System.currentTimeMillis() - t0) // keep ring animation visible
+            val left = 900 - (System.currentTimeMillis() - t0)
             if (left > 0) delay(left)
             _state.update { it.copy(syncing = false) }
         }
@@ -177,7 +227,7 @@ object WatchHub {
         fresh.forEach { t -> runCatching { hc.writeTraining(t) }.onFailure { ok = false; AppLog.e("HC", "write training ${t.id}", it) } }
         if (ok) {
             updateSettings { it.copy(lastTrainingStart = fresh.maxOf { t -> t.start }) }
-            if (s.clearAfterImport) ble.request("training_clear", mapOf("tid" to 0)) // see notes: "id" clashes with request id
+            if (s.clearAfterImport) ble.request("training_clear", mapOf("tid" to 0))
         }
     }
 
@@ -185,7 +235,15 @@ object WatchHub {
     suspend fun refreshHealth() {
         val st = runCatching { hc.status() }.getOrDefault(HcStatus.Unavailable)
         val steps = if (st == HcStatus.Ready) runCatching { hc.readTodaySteps() }.getOrDefault(0L) else 0L
-        _state.update { it.copy(hcStatus = st, hcSteps = steps) }
+        val today = LocalDate.now().toString()
+        _state.update { s ->
+            val newDay = s.stepsDate != today
+            s.copy(
+                hcStatus = st,
+                hcSteps = if (newDay) steps else maxOf(s.hcSteps, steps),
+                stepsDate = today,
+            )
+        }
     }
 
     // ---------- commands from UI ----------
@@ -200,10 +258,18 @@ object WatchHub {
     private fun onEvent(ev: JSONObject) {
         when (ev.optString("ev")) {
             "step" -> {
+                val today = LocalDate.now().toString()
                 val total = ev.optInt("total")
-                _state.update { it.copy(watchSteps = total) }
+                _state.update { st ->
+                    val newDay = st.stepsDate != today
+                    val prev = if (newDay) 0 else (st.watchSteps ?: 0)
+                    val w = if (newDay) total else maxOf(prev, total)
+                    val h = if (newDay) w.toLong() else maxOf(st.hcSteps, w.toLong())
+                    st.copy(stepsDate = today, watchSteps = w, hcSteps = h)
+                }
                 if (hcWritable) scope.launch {
-                    runCatching { hc.writeDailySteps(LocalDate.now().toString(), total.toLong()) }
+                    val toWrite = _state.value.hcSteps
+                    if (toWrite > 0) runCatching { hc.writeDailySteps(today, toWrite) }
                 }
             }
             "batt" -> {
@@ -235,7 +301,7 @@ object WatchHub {
             }
             ble.request("notify", mapOf(
                 "app" to appName, "title" to title.take(40), "body" to body.take(160),
-                "pkg" to pkg, "ico" to Proto.iconKey(pkg), // extra fields, see notes
+                "pkg" to pkg, "ico" to Proto.iconKey(pkg),
             ))
         }
     }

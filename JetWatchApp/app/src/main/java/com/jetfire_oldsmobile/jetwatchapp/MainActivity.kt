@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -14,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,14 +26,15 @@ import com.jetfire_oldsmobile.jetwatchapp.ui.screens.AppsScreen
 import com.jetfire_oldsmobile.jetwatchapp.ui.screens.ControlScreen
 import com.jetfire_oldsmobile.jetwatchapp.ui.screens.HomeScreen
 import com.jetfire_oldsmobile.jetwatchapp.ui.screens.LogScreen
+import com.jetfire_oldsmobile.jetwatchapp.ui.screens.StatsScreen
 import com.jetfire_oldsmobile.jetwatchapp.ui.theme.JetWatchAppTheme
 
-private data class Tab(val route: String, val label: String, val icon: ImageVector)
+private data class Tab(val route: String, @StringRes val labelRes: Int, val icon: ImageVector)
 
 private val tabs = listOf(
-    Tab("home", "Today", Icons.Default.Home),
-    Tab("control", "Watch", Icons.Default.Settings),
-    Tab("apps", "Notifications", Icons.Default.Notifications),
+    Tab("home", R.string.tab_home, Icons.Default.Home),
+    Tab("control", R.string.tab_control, Icons.Default.Settings),
+    Tab("apps", R.string.tab_apps, Icons.Default.Notifications),
 )
 
 class MainActivity : ComponentActivity() {
@@ -50,7 +53,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     snackbarHost = { SnackbarHost(snack) },
                     bottomBar = {
-                        if (route != "logs") NavigationBar {
+                        if (route != "logs" && route != "stats") NavigationBar {
                             tabs.forEach { t ->
                                 NavigationBarItem(
                                     selected = route == t.route,
@@ -59,17 +62,25 @@ class MainActivity : ComponentActivity() {
                                             popUpTo("home"); launchSingleTop = true
                                         }
                                     },
-                                    icon = { Icon(t.icon, t.label) }, label = { Text(t.label) },
+                                    icon = { Icon(t.icon, stringResource(t.labelRes)) },
+                                    label = { Text(stringResource(t.labelRes)) },
                                 )
                             }
                         }
                     },
                 ) { pad ->
                     NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-                        composable("home") { HomeScreen(vm, onOpenLogs = { nav.navigate("logs") }) }
+                        composable("home") {
+                            HomeScreen(
+                                vm,
+                                onOpenLogs = { nav.navigate("logs") },
+                                onOpenStats = { nav.navigate("stats") },
+                            )
+                        }
                         composable("control") { ControlScreen(vm) }
                         composable("apps") { AppsScreen(vm) }
                         composable("logs") { LogScreen(onBack = { nav.popBackStack() }) }
+                        composable("stats") { StatsScreen(vm, onBack = { nav.popBackStack() }) }
                     }
                 }
             }
