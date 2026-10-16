@@ -1,5 +1,6 @@
 #include "ui_common.h"
 #include "core/PowerManager.h"
+#include "core/DataCache.hpp"
 #include <ctime>
 
 struct SbCtx {
@@ -20,15 +21,15 @@ struct SbCtx {
 
 static void sb_refresh(SbCtx* c)
 {
-    struct tm t; hw_get_date_time(t);
+    if (!datacache::time_valid()) return;
+    const struct tm& t = datacache::time();
     lv_label_set_text_fmt(c->time, "%02d:%02d", t.tm_hour, t.tm_min);
 
-    monitor_params_t p;
-    hw_get_monitor_params(p);
+    if (!datacache::monitor_valid()) return;
+    const monitor_params_t& p = datacache::monitor();
 
     bool bt = PowerManager::inst().isBtActive();
 
-    // Ранний выход, если ничего значимого не поменялось
     if (p.battery_percent == c->last_pct &&
         p.is_charging     == c->last_chg &&
         p.battery_present == c->last_pres &&

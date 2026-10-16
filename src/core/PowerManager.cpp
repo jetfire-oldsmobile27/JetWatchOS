@@ -1,6 +1,7 @@
 #include "PowerManager.h"
 #include "AppManager.h"
 #include "Database.h"
+#include "core/DataCache.hpp"
 #include "ui/ui_common.h"
 
 static const uint8_t LOW_BATT_BRIGHTNESS = 20;  
@@ -32,7 +33,7 @@ void PowerManager::screenOff()
         lv_timer_t* t = lv_display_get_refr_timer(d);
         if (t) lv_timer_pause(t);
     }
-    setCpuFrequencyMhz(20);
+    setCpuFrequencyMhz(40);
 }
 
 void PowerManager::wake()
@@ -64,8 +65,8 @@ void PowerManager::poll()
 
 void PowerManager::tick()  
 {
-    monitor_params_t mp;
-    hw_get_monitor_params(mp);
+    if (!datacache::monitor_valid()) return;
+    const monitor_params_t& mp = datacache::monitor();
     _batt_pct = mp.battery_percent;
 
     // --- Детектор старта/остановки зарядки ---

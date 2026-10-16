@@ -4,6 +4,7 @@
 #include "BleService.h"
 #include "ui/ui_common.h"
 #include "hal/hw.h"
+#include "core/DataCache.hpp"
 
 static lv_obj_t* s_alarm_ov   = nullptr;
 static lv_timer_t* s_vib_timer = nullptr;
@@ -31,7 +32,9 @@ void AlarmManager::begin()
 
 void AlarmManager::tick()
 {
-    struct tm t; hw_get_date_time(t);
+    if (!datacache::time_valid()) return;
+
+    const struct tm& t = datacache::time();
     if (t.tm_min == _last_minute) return;
 
     Serial.printf("[ALARM] minute change: prev_min=%d now=%02d:%02d (wday=%d)\n",
@@ -39,15 +42,14 @@ void AlarmManager::tick()
     _last_minute = t.tm_min;
 
     if (!_active) _check();
-    else Serial.println("[ALARM] tick skipped: already active");
+    else          Serial.println("[ALARM] tick skipped: already active");
 }
 
 void AlarmManager::_check()
 {
-    struct tm t; hw_get_date_time(t);
+    const struct tm& t = datacache::time();
     auto& cfg = Database::inst().config();
-
-    uint8_t wday_bit = 1 << ((t.tm_wday + 6) % 7);   // Mon = bit0
+    uint8_t wday_bit = 1 << ((t.tm_wday + 6) % 7);
 
     for (int i = 0; i < 5; ++i) {
         const auto& a = cfg.alarms[i];

@@ -2,6 +2,7 @@
 #include "ui/ui_common.h"
 #include "hal/hw.h"
 #include "core/Database.h"
+#include "core/DataCache.hpp"
 #include <math.h>
 
 #ifndef M_PI
@@ -174,8 +175,9 @@ static void set_needle(lv_obj_t* line, lv_point_precise_t pts[2], float deg)
 void face_default_update()
 {
     if (!l_h || !l_m || !l_s || !line_batt || !line_steps) return;
+    if (!datacache::time_valid()) return;
 
-    struct tm t; hw_get_date_time(t);
+    const struct tm& t = datacache::time();
     lv_label_set_text_fmt(l_h, "%02d", t.tm_hour);
     lv_label_set_text_fmt(l_m, "%02d", t.tm_min);
     lv_label_set_text_fmt(l_s, "%02d", t.tm_sec);
@@ -186,27 +188,27 @@ void face_default_update()
                           wd[wi], t.tm_mday, t.tm_mon + 1);
 
     // Battery
-    monitor_params_t mp;
-    hw_get_monitor_params(mp);
-    int batt = mp.battery_percent;
-    if (batt < 0) batt = 0;
-    if (batt > 100) batt = 100;
+    int batt = 0;
+    if (datacache::monitor_valid()) {
+        batt = datacache::monitor().battery_percent;
+        if (batt < 0)   batt = 0;
+        if (batt > 100) batt = 100;
+    }
     float tb = batt / 100.0f;
     set_needle(line_batt, pt_batt, BATT_DEG_A + tb * (BATT_DEG_B - BATT_DEG_A));
 
     // Steps
-    uint32_t steps = Database::inst().stepsToday();
+    uint32_t steps = datacache::steps();
     if (steps > (uint32_t)STEP_GOAL) steps = STEP_GOAL;
     float ts = (float)steps / (float)STEP_GOAL;
     set_needle(line_steps, pt_steps, STEP_DEG_A + ts * (STEP_DEG_B - STEP_DEG_A));
 
 #if defined(USING_BMA423_SENSOR)
     if (l_temp) {
-        if (!(hw_get_device_online() & HW_BMA423_ONLINE)) {
-            lv_label_set_text(l_temp, "--");
+        if (datacache::temperature_valid()) {
+            lv_label_set_text_fmt(l_temp, "%.0f", datacache::temperature());
         } else {
-            float c = instance.sensor.getTemperature(SensorBMA423::TEMP_DEG);
-            lv_label_set_text_fmt(l_temp, "%.0f", c);   // ← без " °C"
+            lv_label_set_text(l_temp, "--");
         }
     }
 #endif

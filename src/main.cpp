@@ -9,6 +9,7 @@
 #include "core/GpsLog.h"
 #include "core/PowerManager.h"
 #include "core/Protocol.h"
+#include "core/DataCache.hpp"
 #include "ui/ui_common.h"
 #include <FFat.h>
 #include <LV_Helper.h>
@@ -213,6 +214,9 @@ void setup() {
 
   Database::inst().begin();
   hw_audio_init();
+
+  datacache::begin();
+
   AlarmManager::inst().begin();
   crash_persist();
   gpslog::begin();
@@ -266,9 +270,6 @@ void loop() {
     CRASH_MARK("instance.loop");
     instance.loop();
 
-    // LVGL: крутим часто при активном экране, редко — при погашенном.
-    // На погашенном экране рендер всё равно ничего не выводит,
-    // но нужен для таймеров (animations, lv_timer_create) и очереди событий.
     CRASH_MARK("lv_task");
     uint32_t now = millis();
     if (PowerManager::inst().isScreenOff()) {
