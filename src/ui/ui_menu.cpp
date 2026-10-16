@@ -42,14 +42,20 @@ static void make_tile(lv_obj_t* tv, lv_group_t* g, int col, int app_idx)
 
     lv_group_add_obj(g, tile);
 
-    // ---------- Круг-подложка 64×64 ----------
-    // Чёрный фон иконок (RGB565 без альфы) сольётся с фоном экрана,
-    // если подложка совпадает по цвету. Делаем её чуть-чуть светлее
-    // чёрного, чтобы «диск» был виден как объём.
+    // ---------- Круг-подложка ----------
+    // Экран 240×240, все иконки теперь 96×96 (одинаковые).
+    // Диск 116×116 — иконка занимает ~83 % диаметра, кружок читается
+    // как «плитка приложения», а не как мелкая кнопка.
+    // Центр диска = (120, 90) — как и раньше, чуть выше геометрического
+    // центра, чтобы оставить место подписи снизу.
+    constexpr int DISC = 116;
+    constexpr int DISC_X = (240 - DISC) / 2;   // = 62
+    constexpr int DISC_Y = 90 - DISC / 2;      // = 32
+
     lv_obj_t* disc = lv_obj_create(tile);
     lv_obj_remove_style_all(disc);
-    lv_obj_set_size(disc, 64, 64);
-    lv_obj_set_pos(disc, 88, 58);                       // центр = 120,90
+    lv_obj_set_size(disc, DISC, DISC);
+    lv_obj_set_pos(disc, DISC_X, DISC_Y);
     lv_obj_set_style_radius(disc, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(disc, lv_color_hex(0x050505), 0);
     lv_obj_set_style_bg_opa(disc, LV_OPA_COVER, 0);
@@ -60,32 +66,26 @@ static void make_tile(lv_obj_t* tv, lv_group_t* g, int col, int app_idx)
         lv_obj_t* img = UI_IMG_CREATE(disc);
         UI_IMG_SET_SRC(img, apps[app_idx].icon);
 
-        // Приводим все иконки к одному визуальному размеру 48×48:
-        //  • 24×24 → scale 512 (=2×) → 48×48
-        //  • 96×96 → scale 128 (=0.5×) → 48×48
-        // Явно фиксируем габарит до scale, иначе LVGL считает
-        // размер уже масштабированным и рендерит с артефактами.
-        int w = 48, h = 48;
-        lv_obj_set_size(img, w, h);
+        // Все иконки 96×96 — рисуем 1:1 (scale 256).
+        // Никаких апскейлов/даунскейлов: пиксель-в-пиксель, без
+        // дизеринга и «мыла» на чёрном фоне.
+        lv_obj_set_size(img, 96, 96);
 #if LVGL_VERSION_MAJOR >= 9
-        int scale = (apps[app_idx].icon->header.w >= 96) ? 128 : 512;
-        lv_image_set_scale(img, scale);
-        // Нет smooth-скейла без --bpp 4+alpha; хотя бы отключаем
-        // дизеринг, чтобы не было цветных точек на чёрном фоне.
+        lv_image_set_scale(img, 256);
         lv_image_set_antialias(img, false);
 #else
-        int zoom = (apps[app_idx].icon->header.w >= 96) ? 128 : 512;
-        lv_img_set_zoom(img, zoom);
+        lv_img_set_zoom(img, 256);
 #endif
         lv_obj_center(img);
         lv_obj_clear_flag(img, LV_OBJ_FLAG_CLICKABLE);
     }
 
     // ---------- Подпись ----------
+    // Диск занимает y = 32..148. Подпись ставим сразу под ним.
     lv_obj_t* name = ui_make_label(tile, F_TITLE, ui::text(),
                                    apps[app_idx].name);
     lv_obj_set_width(name, 240);
-    lv_obj_set_pos(name, 0, 168);
+    lv_obj_set_pos(name, 0, 156);
     lv_obj_set_style_text_align(name, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_clear_flag(name, LV_OBJ_FLAG_CLICKABLE);
 }

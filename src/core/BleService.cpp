@@ -211,8 +211,16 @@ void BleService::_handleLine(const char* s)
     }
     else if (!strcmp(cmd, "brightness")) {
         cfg.brightness = d["v"] | 128;
-        hw_set_disp_backlight(cfg.brightness);
+        bool off = PowerManager::inst().isScreenOff();
+        if (!off) {
+            hw_set_disp_backlight(cfg.brightness);
+        }
         db.saveConfig();
+
+        Serial.printf("[BLE] brightness=%u screen_off=%d -> %s\n",
+                    (unsigned)cfg.brightness, (int)off,
+                    off ? "deferred (will apply on wake)" : "applied");
+
         JsonDocument r; reply(r, id, true);
     }
     else if (!strcmp(cmd, "timeout")) {

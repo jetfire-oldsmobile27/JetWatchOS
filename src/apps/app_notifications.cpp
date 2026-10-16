@@ -18,6 +18,10 @@ static lv_obj_t* s_popup  {nullptr};
 
 void app_notifications_push(const char* app, const char* title, const char* body)
 {
+    Serial.printf("[NOTIF] push app='%s' title='%s' body='%s' screen_off=%d\n",
+                  app ? app : "", title ? title : "", body ? body : "",
+                  (int)PowerManager::inst().isScreenOff());
+
     Notification n{};
     strlcpy(n.app,   app,   sizeof(n.app));
     strlcpy(n.title, title, sizeof(n.title));
@@ -26,21 +30,23 @@ void app_notifications_push(const char* app, const char* title, const char* body
     s_list.insert(s_list.begin(), n);
     if (s_list.size() > 20) s_list.pop_back();
 
-    // ---------- Вибрация ----------
-    hw_feedback();
-
-    // ---------- Разбудить экран, если потушен ----------
+    // 1) Разбудить экран ДО вибрации и баннера — чтобы LVGL
+    //    успел выйти из "слепого" режима к моменту отрисовки.
     if (PowerManager::inst().isScreenOff()) {
         PowerManager::inst().wake();
+        Serial.println("[NOTIF] screen woke");
     }
 
-    // ---------- Звук (если включён) ----------
+    // 2) Вибрация
+    hw_feedback();
+    Serial.println("[NOTIF] vibrate done");
+
+    // 3) Звук (если включён)
     if (Database::inst().config().sounds_on) {
-        // Звука пока нет — кладёшь /notify.mp3 в FFat
         hw_set_sd_music_play(AUDIO_SOURCE_FATFS, "notify.mp3");
     }
 
-    // ---------- Баннер на layer_top ----------
+    // 4) Баннер
     if (s_popup) { UI_OBJ_DEL(s_popup); s_popup = nullptr; }
     s_popup = lv_obj_create(lv_layer_top());
     lv_obj_remove_style_all(s_popup);
@@ -64,6 +70,8 @@ void app_notifications_push(const char* app, const char* title, const char* body
         lv_timer_del(tt);
     }, 4000, nullptr);
     lv_timer_set_repeat_count(t, 1);
+
+    Serial.println("[NOTIF] banner created");
 }
 
 class NotificationsApp final : public App {

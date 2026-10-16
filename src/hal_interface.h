@@ -332,6 +332,18 @@ typedef struct {
 void hw_init();
 
 /**
+ * @brief Инициализирует только аудио-пайплайн: очередь, event-group,
+ *        playerTask. PMU-события и прочие сайд-эффекты hw_init() НЕ
+ *        трогает — можно звать из setup() рядом с on_pmu_event без
+ *        риска двойной регистрации.
+ *
+ * Идемпотентно: повторный вызов ничего не делает.
+ *
+ * @return true если пайплайн готов (или уже был готов).
+ */
+bool hw_audio_init();
+
+/**
  * @brief Get the number of connected hardware devices.
  *
  * @return The number of connected hardware devices.

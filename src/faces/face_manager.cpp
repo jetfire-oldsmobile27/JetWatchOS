@@ -99,7 +99,7 @@ void FaceManager::begin()
     }
 
     // ---------- 1..N: сгенерированные ----------
-    register_generated("756_2", init_face_756_2, update_check_756_2);
+    //register_generated("756_2", init_face_756_2, update_check_756_2);
     // register_generated("34_2_dial",  init_face_34_2_dial,  update_check_34_2_dial);
     // register_generated("75_2_dial",  init_face_75_2_dial,  update_check_75_2_dial);
 

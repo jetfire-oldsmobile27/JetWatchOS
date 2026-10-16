@@ -626,13 +626,40 @@ const uint8_t mic_gain = 10;
 const uint8_t mic_gain = 10;
 #endif
 
+bool hw_audio_init()
+{
+#ifdef ARDUINO
+    if (playerQueue && playerEvent && playerTaskHandler) {
+        return true;   // уже инициализировано
+    }
+
+    playerQueue = xQueueCreate(2, sizeof(audio_params_t));
+    playerEvent = xEventGroupCreate();
+    if (!playerQueue || !playerEvent) {
+        Serial.println("[PLAY] audio init failed: no heap for queue/event");
+        return false;
+    }
+
+    BaseType_t ok = xTaskCreate(playerTask, "app/play",
+                                8 * 1024, NULL, 12, &playerTaskHandler);
+    if (ok != pdPASS) {
+        Serial.println("[PLAY] audio init failed: xTaskCreate");
+        vQueueDelete(playerQueue);  playerQueue = nullptr;
+        vEventGroupDelete(playerEvent); playerEvent = nullptr;
+        return false;
+    }
+
+    Serial.println("[PLAY] audio pipeline ready");
+    return true;
+#else
+    return false;
+#endif
+}
 
 void hw_init()
 {
 #ifdef ARDUINO
-    playerQueue =  xQueueCreate(2, sizeof(audio_params_t));
-    playerEvent =  xEventGroupCreate();
-
+    hw_audio_init();
     hw_radio_begin();
 
 #ifdef USING_EXTERN_NRF2401
@@ -681,9 +708,6 @@ void hw_init()
         }
     });
 #endif //USING_INPUT_DEV_KEYBOARD
-
-
-    xTaskCreate(playerTask, "app/play", 8 * 1024, NULL, 12, &playerTaskHandler);
 
     prefs.begin(NVS_NAME);
     if (prefs.getBytes(NVS_NAME, &user_setting, sizeof(user_setting_params_t)) != sizeof(user_setting_params_t)) {  // simple check that data fits
@@ -1365,53 +1389,51 @@ void hw_get_filesystem_music(vector < AudioParams_t > &list)
 
 void hw_set_sd_music_play(audio_source_type_t source_type, const char *filename)
 {
+    printf("hw_set_sd_music_play : %s source_type:%d\n", filename, source_type);
+#ifdef ARDUINO
+    if (!playerEvent || !playerQueue || !playerTaskHandler) {
+        Serial.println("[PLAY] audio pipeline not ready - skip");
+        return;
+    }
     audio_params_t params = {
         .event = APP_EVENT_PLAY,
         .filename = filename,
         .source_type = source_type
     };
-    printf("hw_set_sd_music_play : %s source_type:%d\n", filename, source_type);
-#ifdef ARDUINO
     xEventGroupClearBits(playerEvent, PLAYER_PLAY | PLAYER_END);
     if (hw_player_running()) {
         xEventGroupSetBits(playerEvent, PLAYER_END);
-        Serial.println("Wait hw_player_running stop...");
-        while (hw_player_running()) {
-            delay(2);
-        }
-        Serial.println("hw_player_running stopped.");
+        while (hw_player_running()) delay(2);
     }
     xEventGroupSetBits(playerEvent, PLAYER_PLAY);
     xQueueSend(playerQueue, &params, portMAX_DELAY);
-    Serial.println("hw_set_sd_music_play send done\n");
 #endif
 }
 
 void hw_set_play_stop()
 {
 #ifdef ARDUINO
+    if (!playerEvent) return;                       // ← вот этой строки не хватало
     xEventGroupClearBits(playerEvent, PLAYER_PLAY | PLAYER_END);
     if (hw_player_running()) {
         xEventGroupSetBits(playerEvent, PLAYER_END);
-        while (hw_player_running()) {
-            delay(2);
-        }
+        while (hw_player_running()) delay(2);
     }
 #endif
 }
 
 void hw_set_sd_music_pause()
 {
-    printf("playerTaskHandler pause!\n");
 #ifdef ARDUINO
+    if (!playerEvent) return;
     xEventGroupClearBits(playerEvent, PLAYER_PLAY);
 #endif
 }
 
 void hw_set_sd_music_resume()
 {
-    printf("playerTaskHandler resume!\n");
 #ifdef ARDUINO
+    if (!playerEvent) return;
     xEventGroupSetBits(playerEvent, PLAYER_PLAY);
 #endif
 }
@@ -1419,9 +1441,11 @@ void hw_set_sd_music_resume()
 bool hw_player_running()
 {
 #ifdef ARDUINO
+    if (!playerEvent) return false;                 // ← и здесь
     return xEventGroupGetBits(playerEvent) & PLAYER_RUNNING;
-#endif
+#else
     return true;
+#endif
 }
 
 void hw_set_volume(uint8_t volume)

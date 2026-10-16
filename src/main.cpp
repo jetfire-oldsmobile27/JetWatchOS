@@ -128,13 +128,13 @@ static void on_pmu_event(DeviceEvent_t, void *params, void *) {
 // ============================================================================
 static void register_apps() {
   auto &m = AppManager::inst();
+  m.registerApp("Steps", &img_monitoring, app_pedometer_make);
+  m.registerApp("Music", &img_music, app_music_make);
   m.registerApp("Notifications", &img_notify, app_notifications_make);
   m.registerApp("Weather", &img_weather, app_weather_make);
-  m.registerApp("Steps", &img_monitoring, app_pedometer_make);
   m.registerApp("Training", &img_run, app_training_make);
   m.registerApp("Alarm", &img_alarm, app_alarm_make);
   m.registerApp("Stopwatch", &img_timer, app_stopwatch_make);
-  m.registerApp("Music", &img_music, app_music_make);
   m.registerApp("Flashlight", &img_flash, app_flashlight_make);
   m.registerApp("Terminal", &img_test, app_terminal_make);
   m.registerApp("Settings", &img_settings, app_settings_make);
@@ -212,6 +212,7 @@ void setup() {
                 db ? db->data_size : 0, lv_display_get_render_mode(d));
 
   Database::inst().begin();
+  hw_audio_init();
   AlarmManager::inst().begin();
   crash_persist();
   gpslog::begin();
