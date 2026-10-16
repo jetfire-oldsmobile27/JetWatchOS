@@ -27,6 +27,7 @@ void Database::_applyDefaults()
     for (int i=0;i<5;i++) _cfg.alarms[i].enabled = false;
     _cfg.face_idx = 0;
     _cfg.sounds_on = true;
+    _cfg.power_save = false;
 }
 
 void Database::begin()
@@ -56,6 +57,7 @@ void Database::begin()
             _cfg.gps_time_sync = doc["gps_time_sync"] | _cfg.gps_time_sync;
             _cfg.tz_offset_min = doc["tz_offset_min"] | _cfg.tz_offset_min;
             _cfg.sounds_on = doc["sounds_on"] | _cfg.sounds_on;
+            _cfg.power_save = doc["power_save"] | _cfg.power_save;
             JsonArray arr = doc["alarms"].as<JsonArray>();
             int i=0;
             for (JsonObject a : arr) {
@@ -95,6 +97,7 @@ void Database::saveConfig()
     doc["gps_time_sync"] = _cfg.gps_time_sync;
     doc["tz_offset_min"] = _cfg.tz_offset_min;
     doc["sounds_on"] = _cfg.sounds_on;
+    doc["power_save"] = _cfg.power_save;
 
     JsonArray al = doc["alarms"].to<JsonArray>();
     for (int i=0;i<5;i++) {
@@ -176,6 +179,15 @@ uint32_t Database::stepsToday()
 void Database::flushSteps()
 {
     _saveStepsFile();
+}
+
+void Database::setStepsToday(uint32_t steps)
+{
+    _rolloverDay();
+    if (steps > _steps_today) {
+        _steps_today = steps;
+        _saveStepsFile();
+    }
 }
 
 std::vector<StepDay> Database::stepsRange(uint16_t days_back)

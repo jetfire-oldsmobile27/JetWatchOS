@@ -160,6 +160,7 @@ void BleService::_handleLine(const char* s)
         JsonDocument r;
         r["fw"]   = proto::FIRMWARE_VER;
         r["batt"] = PowerManager::inst().batteryPct();
+        r["ps"]   = cfg.power_save;
         reply(r, id, true);
     }
     else if (!strcmp(cmd, "wifi")) {
@@ -295,6 +296,19 @@ void BleService::_handleLine(const char* s)
     //     r["local"] = (uint32_t)local_unix;
     //     reply(r, id, true);
     // }
+    else if (!strcmp(cmd, "steps_set")) {
+        uint32_t s = d["steps"] | 0u;
+        db.setStepsToday(s);
+        db.flushSteps();
+        JsonDocument r; reply(r, id, true);
+    }
+    else if (!strcmp(cmd, "power_save")) {
+        bool on = d["on"] | true;
+        cfg.power_save = on;
+        db.saveConfig();
+        PowerManager::inst().setPowerSave(on);
+        JsonDocument r; reply(r, id, true);
+    }
     else {
         JsonDocument r; r["err"] = "unknown cmd";
         reply(r, id, false);

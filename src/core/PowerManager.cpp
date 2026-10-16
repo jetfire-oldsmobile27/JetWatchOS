@@ -10,6 +10,7 @@ PowerManager& PowerManager::inst() { static PowerManager m; return m; }
 void PowerManager::begin()
 {
     _timeout_ms = Database::inst().config().disp_timeout_s * 1000UL;   // 0 = никогда
+    if (Database::inst().config().power_save) setPowerSave(true);
 }
 
 void PowerManager::resetActivity() { UI_TRIGGER_ACTIVITY(); }
@@ -87,4 +88,28 @@ void PowerManager::tick()
     // --- Таймаут экрана ---
     if (!_screen_off && _timeout_ms > 0 && UI_INACTIVE_MS() > _timeout_ms)
         screenOff();
+}
+
+void PowerManager::setPowerSave(bool on)
+{
+    if (_power_save == on) return;
+    _power_save = on;
+
+    if (on) {
+        setCpuFrequencyMhz(80);
+        if (!_screen_off) {
+            uint8_t cfg_b = Database::inst().config().brightness;
+            hw_set_disp_backlight(cfg_b > 60 ? 60 : cfg_b);
+        }
+        uint32_t base = Database::inst().config().disp_timeout_s * 1000UL;
+        _timeout_ms = base ? (base / 2 < 5000 ? 5000 : base / 2) : 0;
+        Serial.println("[PWR] power-save ON");
+    } else {
+        setCpuFrequencyMhz(240);
+        if (!_screen_off) {
+            hw_set_disp_backlight(Database::inst().config().brightness);
+        }
+        _timeout_ms = Database::inst().config().disp_timeout_s * 1000UL;
+        Serial.println("[PWR] power-save OFF");
+    }
 }

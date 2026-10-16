@@ -26,6 +26,9 @@ public:
     void wake();
     bool isScreenOff() const { return _screen_off; }
 
+    void setPowerSave(bool on);
+    bool isPowerSave() const { return _power_save; }
+
     // Совместимость с двойным кликом в AppManager
     void sleepNow()      { screenOff(); }
     void lightSleepNow() { screenOff(); }
@@ -38,4 +41,5 @@ private:
     bool     _screen_off    = false;  
     bool     _was_charging  = false;
     bool     _had_battery   = false;
+    bool     _power_save    = false;
 };

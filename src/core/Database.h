@@ -40,6 +40,7 @@ struct UserConfig {
     bool    gps_time_sync = false;   
     int16_t tz_offset_min = 180; // +3:00
     bool sounds_on = true;
+    bool power_save = false;
 };
 
 class Database {
@@ -62,6 +63,7 @@ public:
     // --- Config / Alarms ---
     UserConfig& config() { return _cfg; }
     void saveConfig();
+    void setStepsToday(uint32_t steps);
 
 private:
     UserConfig _cfg{};

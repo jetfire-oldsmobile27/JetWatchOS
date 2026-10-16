@@ -33,6 +33,7 @@ data class WatchState(
     val lastError: String? = null,
     /** Локальная дата, к которой относятся накопленные счётчики. При смене дня сбрасываем. */
     val stepsDate: String = LocalDate.now().toString(),
+    val powerSave: Boolean = false
 ) {
     /**
      * Приоритет: телефон (Health Connect, все источники) → данные часов за сегодня → максимум из недели.
@@ -147,7 +148,13 @@ object WatchHub {
             hcWritable = runCatching { hc.status() == HcStatus.Ready }.getOrDefault(false)
 
             ble.request("ping")?.takeIf { it.optBoolean("ok") }?.let { p ->
-                _state.update { it.copy(fw = p.optString("fw"), battery = p.optInt("batt", -1).takeIf { b -> b >= 0 }) }
+                _state.update { 
+                    it.copy(
+                        fw = p.optString("fw"), 
+                        battery = p.optInt("batt", -1).takeIf { b -> b >= 0 },
+                        powerSave = p.optBoolean("ps", it.powerSave)
+                        ) 
+                }
             }
             val zone = ZoneId.systemDefault()
             ble.request("time_sync", mapOf(
@@ -170,6 +177,16 @@ object WatchHub {
 
                 // Телефон — источник истины; часы только добавляют, если телефон молчит.
                 val totalToday = maxOf(hcToday, watchToday.toLong())
+                if (hcToday > watchToday) {
+                    AppLog.i("HUB", "push steps to watch: watch=$watchToday phone=$hcToday")
+                    runCatching {
+                        ble.request("steps_set", mapOf("steps" to hcToday))?.let { r ->
+                            if (r.optBoolean("ok")) {
+                                _state.update { st -> st.copy(watchSteps = hcToday.toInt()) }
+                            }
+                        }
+                    }.onFailure { AppLog.w("HUB", "steps_set failed: ${it.message}") }
+                }
 
                 _state.update { st ->
                     val newDay = st.stepsDate != today
