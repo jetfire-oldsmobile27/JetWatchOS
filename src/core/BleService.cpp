@@ -24,9 +24,13 @@ void ble_set_active(bool on) { /* no-op, активность ведётся ч�
 class SrvCB : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* s, NimBLEConnInfo& info) override {
         Serial.printf("[BLE] connected  addr=%s\n",
-                      info.getAddress().toString().c_str());
-        // Обновить connection parameters, если хочется:
-        // s->updateConnParams(info.getConnHandle(), 12, 24, 0, 400);
+                    info.getAddress().toString().c_str());
+
+        s->updateConnParams(info.getConnHandle(),
+                            /*minInterval*/ 80,
+                            /*maxInterval*/ 160,
+                            /*latency*/     4,
+                            /*timeout*/     600);
     }
 
     void onDisconnect(NimBLEServer* s, NimBLEConnInfo& info, int reason) override {
@@ -76,6 +80,8 @@ void BleService::begin(const char* name)
     auto* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(proto::SERVICE_UUID);
     adv->enableScanResponse(true);          // было setScanResponse(true)
+    adv->setMinInterval(800);    // 500 ms
+    adv->setMaxInterval(1600);   // 1000 ms
     NimBLEDevice::startAdvertising();
 
     _active = true;

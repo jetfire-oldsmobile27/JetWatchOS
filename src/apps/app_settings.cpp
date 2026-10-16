@@ -187,10 +187,9 @@ private:
             }
             // hw_get_gps_info читает UART — до 1 с, не в LVGL-потоке
             apptask_run_detached([]() {
-                extern bool gps_force_sync_once;
-                gps_force_sync_once = true;
                 gps_params_t p{};
-                hw_get_gps_info(p);
+                hw_get_gps_info(p);            // получаем фикс
+                instance.powerControl(POWER_GPS, false);   // гасим LDO GPS
             });
             ui_msg_pop_up("GPS", "Time sync requested — wait for fix");
         });

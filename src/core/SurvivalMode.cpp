@@ -298,7 +298,6 @@ void survival::runSurvivalBoot()
                           String(read_battery_percent()).c_str(),
                       g_sv.entry_epoch ? "ok" : "invalid");
 
-        g_sv.last_press_epoch = now_epoch;
         if (wait_for_button_release_or_hold(3000)) {
             Serial.println("[SURV] HOLD -> exiting survival mode");
             nvs_set_armed(false);

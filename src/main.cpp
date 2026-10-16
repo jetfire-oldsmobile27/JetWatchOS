@@ -194,13 +194,15 @@ static void poll_serial_time_sync() {
 //  setup / loop
 // ============================================================================
 void setup() {
-  if (survival::isArmed()) {
-        survival::runSurvivalBoot();   // @note never return!
-  }
+  // if (survival::isArmed()) {
+  //       survival::runSurvivalBoot();   // @note never return!
+  // }
   Serial.begin(115200);
   crash_init();
 
   instance.begin();
+  instance.powerControl(POWER_RADIO, false);
+  WiFi.mode(WIFI_OFF);
   beginLvglHelper(instance);
   lv_display_t *d = lv_display_get_default();
   lv_draw_buf_t *db = lv_display_get_buf_active(d);
@@ -253,34 +255,49 @@ void setup() {
 }
 
 void loop() {
-  static uint32_t last_db_flush = 0;
-  static uint32_t last_pm_tick = 0;
+    static uint32_t last_db_flush = 0;
+    static uint32_t last_pm_tick = 0;
+    static uint32_t last_lv       = 0;
 
-  poll_serial_time_sync();
-  hw_poll_wifi();
+    poll_serial_time_sync();
+    hw_poll_wifi();
 
-  CRASH_MARK("instance.loop");
-  instance.loop();
-  CRASH_MARK("lv_task");
-  lv_task_handler();
-  CRASH_MARK("power_manager.poll");
-  PowerManager::inst().poll();
-  CRASH_MARK("app.tick");
-  AppManager::inst().tick();
-  crash_tick();
+    CRASH_MARK("instance.loop");
+    instance.loop();
 
-  uint32_t now = lv_tick_get();
-  if (now - last_pm_tick > 1000) {
-    last_pm_tick = now;
-    PowerManager::inst().tick();
-    AlarmManager::inst().tick();
-  }
-  if (now - last_db_flush > 60000) {
-    last_db_flush = now;
-    Database::inst().flushSteps();
-  }
+    // LVGL: крутим часто при активном экране, редко — при погашенном.
+    // На погашенном экране рендер всё равно ничего не выводит,
+    // но нужен для таймеров (animations, lv_timer_create) и очереди событий.
+    CRASH_MARK("lv_task");
+    uint32_t now = millis();
+    if (PowerManager::inst().isScreenOff()) {
+        if (now - last_lv >= 200) {
+            last_lv = now;
+            lv_task_handler();
+        }
+    } else {
+        last_lv = now;
+        lv_task_handler();
+    }
 
-  // Опрос педометра убран — всё приходит через on_sensor_event()
-  BleService::inst().poll();
-  delay(5);
+    CRASH_MARK("power_manager.poll");
+    PowerManager::inst().poll();
+
+    CRASH_MARK("app.tick");
+    AppManager::inst().tick();
+
+    crash_tick();
+
+    if (now - last_pm_tick > 1000) {
+        last_pm_tick = now;
+        PowerManager::inst().tick();
+        AlarmManager::inst().tick();
+    }
+    if (now - last_db_flush > 60000) {
+        last_db_flush = now;
+        Database::inst().flushSteps();
+    }
+
+    BleService::inst().poll();
+    delay(PowerManager::inst().isScreenOff() ? 50 : 5);
 }
