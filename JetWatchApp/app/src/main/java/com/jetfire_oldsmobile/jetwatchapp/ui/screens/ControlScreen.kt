@@ -177,6 +177,41 @@ fun ControlScreen(vm: WatchViewModel) {
                         // @todo startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS))
                     }) { Text(stringResource(R.string.ctrl_saver_on)) }
                 }
+
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+                Text ( "Режим выживания: экран, BLE, WiFi, LoRa и тач отключаются, " +
+                "МК уходит в deep sleep. Метрики — в Serial по боковой кнопке. " +
+                        "Выход — двойное нажатие.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                var confirmSurv by remember { mutableStateOf(false)}
+
+                OutlinedButton(
+                    onClick = { confirmSurv = true },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Text("Войти в режим выживания")
+                }
+                if (confirmSurv) AlertDialog(
+                    onDismissRequest = { confirmSurv = false },
+                    title = { Text("Режим выживания") },
+                    text  = { Text(
+                        "Часы перезагрузятся и отключат BLE. Отменить можно " +
+                                "только двойным нажатием боковой кнопки. Продолжить?"
+                    ) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmSurv = false
+                            vm.cmd("Survival", "survival", mapOf("on" to true))
+                        }) { Text("Да, взвести") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmSurv = false }) { Text("Отмена") }
+                    },
+                )
             }
         }
 

@@ -8,6 +8,7 @@
 #include <NimBLEDevice.h>
 #include <WiFi.h>
 #include <freertos/queue.h>
+#include "core/SurvivalMode.hpp"
 
 static NimBLEServer*         s_srv  {nullptr};
 static NimBLECharacteristic* s_tx   {nullptr};
@@ -308,6 +309,19 @@ void BleService::_handleLine(const char* s)
         db.saveConfig();
         PowerManager::inst().setPowerSave(on);
         JsonDocument r; reply(r, id, true);
+    }
+    else if (!strcmp(cmd, "survival")) {
+        bool on = d["on"] | true;
+        if (on) {
+            JsonDocument r;
+            reply(r, id, true);  
+            delay(700);
+            survival::armAndReboot(); // never returns!
+        } else {
+            survival::disarmFromPhone();
+            JsonDocument r;
+            reply(r, id, true);
+        }
     }
     else {
         JsonDocument r; r["err"] = "unknown cmd";

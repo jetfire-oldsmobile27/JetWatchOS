@@ -12,6 +12,7 @@
 #include "ui/ui_common.h"
 #include <FFat.h>
 #include <LV_Helper.h>
+#include "core/SurvivalMode.hpp"
 
 #include <expected>
 
@@ -193,6 +194,9 @@ static void poll_serial_time_sync() {
 //  setup / loop
 // ============================================================================
 void setup() {
+  if (survival::isArmed()) {
+        survival::runSurvivalBoot();   // @note never return!
+  }
   Serial.begin(115200);
   crash_init();
 

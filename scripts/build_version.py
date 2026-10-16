@@ -24,7 +24,7 @@ print(f"[build_version] firmware version = {full_version}")
 # Прокидываем строку через -D, чтобы в C++ было:
 #   #define FIRMWARE_VERSION_STR "1.0.42"
 #   #define FIRMWARE_BUILD       42
-env.Append(CPPDEFINES=[
-    ("FIRMWARE_VERSION_STR", env.StringifyMacro(full_version)),
-    ("FIRMWARE_BUILD",       build_num),
-])
+# env.Append(CPPDEFINES=[
+#     ("FIRMWARE_VERSION_STR", env.StringifyMacro(full_version)),
+#     ("FIRMWARE_BUILD",       build_num),
+# ])
