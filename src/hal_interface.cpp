@@ -10,6 +10,7 @@
 #include <math.h>
 #include <lvgl.h>
 #include "core/Database.h"  
+#include "audio/startup_audio.h"
 
 #ifndef USING_RADIO_NAME
 #define USING_RADIO_NAME "N/A"
@@ -370,6 +371,8 @@ static void hw_sd_play(audio_source_type_t source, const char *filename)
     free(buf);
 }
 
+static bool playWAV(uint8_t* src, size_t src_len); // @note fwd decl
+
 static void playerTask(void *args)
 {
     audio_params_t params;
@@ -387,6 +390,9 @@ static void playerTask(void *args)
             playMP3((uint8_t * )keyboard_audio, keyboard_audio_mp3_len);
             break;
         case APP_EVENT_RECOVER:
+            break;
+        case APP_EVENT_PLAY_STARTUP:
+            playWAV((uint8_t*)startup_16k_wav, startup_16k_wav_len);
             break;
         default:
             break;
@@ -2321,5 +2327,117 @@ void hw_set_audio_effect_ab_class(bool enable)
         instance.setAudioMode(AUDIO_CLASS_D);
     }
 #endif
+}
+
+
+
+struct WavInfo {
+    uint16_t channels        = 0;
+    uint32_t sample_rate     = 0;
+    uint16_t bits_per_sample = 0;
+    size_t   data_offset     = 0;
+    size_t   data_size       = 0;
+};
+
+static bool wavParseHeader(const uint8_t* buf, size_t len, WavInfo& out)
+{
+    out = WavInfo{};
+    if (!buf || len < 44) return false;
+    if (memcmp(buf, "RIFF", 4) || memcmp(buf + 8, "WAVE", 4)) return false;
+
+    size_t pos = 12;
+    bool   have_fmt = false;
+
+    while (pos + 8 <= len) {
+        const uint8_t* chunk = buf + pos;
+        uint32_t csize = (uint32_t)chunk[4]
+                       | ((uint32_t)chunk[5] <<  8)
+                       | ((uint32_t)chunk[6] << 16)
+                       | ((uint32_t)chunk[7] << 24);
+        pos += 8;
+
+        if (!memcmp(chunk, "fmt ", 4)) {
+            if (pos + 16 > len) return false;
+            const uint8_t* f = buf + pos;
+            uint16_t fmt = (uint16_t)f[0] | ((uint16_t)f[1] << 8);
+            if (fmt != 1) return false;                    // PCM only
+            out.channels        = (uint16_t)f[2] | ((uint16_t)f[3] << 8);
+            out.sample_rate     = (uint32_t)f[4]
+                                | ((uint32_t)f[5] <<  8)
+                                | ((uint32_t)f[6] << 16)
+                                | ((uint32_t)f[7] << 24);
+            out.bits_per_sample = (uint16_t)f[14] | ((uint16_t)f[15] << 8);
+            have_fmt = true;
+        }
+        else if (!memcmp(chunk, "data", 4)) {
+            if (!have_fmt) return false;
+            out.data_offset = pos;
+            out.data_size   = csize;
+            if (out.data_offset + out.data_size > len)
+                out.data_size = len - out.data_offset;
+            return true;
+        }
+        pos += csize + (csize & 1u);
+    }
+    return false;
+}
+
+static bool playWAV(uint8_t* src, size_t src_len)
+{
+    WavInfo w;
+    if (!wavParseHeader(src, src_len, w)) {
+        Serial.println("[WAV] bad header");
+        return false;
+    }
+    if (w.bits_per_sample != 16 || w.channels < 1 || w.channels > 2) {
+        Serial.printf("[WAV] unsupported: bits=%u ch=%u\n",
+                      w.bits_per_sample, w.channels);
+        return false;
+    }
+
+    Serial.printf("[WAV] ch=%u rate=%u bits=%u len=%u\n",
+                  w.channels, w.sample_rate, w.bits_per_sample,
+                  (unsigned)w.data_size);
+
+#if defined(USING_PCM_AMPLIFIER)
+    instance.powerControl(POWER_SPEAK, true);
+    instance.player.configureTX(w.sample_rate,
+                            I2S_DATA_BIT_WIDTH_16BIT,
+                            (i2s_slot_mode_t)w.channels);
+    instance.player.write(src + w.data_offset, w.data_size);
+    instance.powerControl(POWER_SPEAK, false);
+    return true;
+#elif defined(USING_AUDIO_CODEC)
+    if (!(HW_CODEC_ONLINE & hw_get_device_online())) return false;
+    instance.codec.setVolume(100);
+    int ret = instance.codec.open(16, w.channels, w.sample_rate);
+    if (ret != 0) { Serial.printf("[WAV] open 0x%X\n", ret); return false; }
+
+    constexpr size_t CHUNK = 4096;
+    size_t off = w.data_offset, left = w.data_size;
+    while (left > 0) {
+        size_t n = left < CHUNK ? left : CHUNK;
+        instance.codec.write(src + off, n);
+        off  += n;
+        left -= n;
+    }
+    instance.codec.close();
+    return true;
+#else
+    return false;
+#endif
+}
+
+void hw_play_startup_sound()
+{
+    if (!playerQueue) {
+        Serial.println("[PLAY] queue not ready, skip startup sound");
+        return;
+    }
+    audio_params_t p{};
+    p.event       = APP_EVENT_PLAY_STARTUP;
+    p.filename    = nullptr;
+    p.source_type = AUDIO_SOURCE_FATFS;
+    xQueueSend(playerQueue, &p, 0);   // 0 timeout — не блокируем setup()
 }
 

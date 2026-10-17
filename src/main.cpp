@@ -1,6 +1,7 @@
 #include "hal/hw.h"
 
 #include "apps/apps.h"
+#include "apps/AppTask.h"
 #include "core/AlarmManager.h"
 #include "core/AppManager.h"
 #include "core/BleService.h"
@@ -249,6 +250,8 @@ void setup() {
   hw_set_disp_backlight(cfg.brightness);
   PowerManager::inst().resetActivity();
 
+  hw_play_startup_sound();
+
   xTaskCreatePinnedToCore(
       [](void *) {
         while (true) {
@@ -297,7 +300,9 @@ void loop() {
     }
     if (now - last_db_flush > 60000) {
         last_db_flush = now;
-        Database::inst().flushSteps();
+        apptask_run_detached([]() {
+            Database::inst().flushSteps();
+        });
     }
 
     BleService::inst().poll();

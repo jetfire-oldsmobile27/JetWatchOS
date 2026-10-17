@@ -1,4 +1,5 @@
 #include "Database.h"
+#include "core/DataCache.hpp"
 #include <FFat.h>
 #include <ArduinoJson.h>
 #include "PowerManager.h"
@@ -153,10 +154,13 @@ void Database::_saveStepsFile()
 
 void Database::_rolloverDay()
 {
-    struct tm t; hw_get_date_time(t);
+    if (!datacache::time_valid()) return;
+
+    struct tm t = datacache::time();
     char ymd[11];
     snprintf(ymd, sizeof(ymd), "%04d-%02d-%02d",
-             t.tm_year+1900, t.tm_mon+1, t.tm_mday);
+             t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+
     if (strcmp(ymd, _today_ymd) != 0) {
         _saveStepsFile();
         strlcpy(_today_ymd, ymd, sizeof(_today_ymd));

@@ -11,6 +11,7 @@
 enum app_event {
     APP_EVENT_PLAY,
     APP_EVENT_PLAY_KEY,
+    APP_EVENT_PLAY_STARTUP,
     APP_EVENT_RECOVER,
     APP_NFC_EVENT,
 };

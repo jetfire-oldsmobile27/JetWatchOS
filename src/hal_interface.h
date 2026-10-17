@@ -1525,6 +1525,8 @@ void hw_set_audio_effect_3d(bool enable);
  */
 void hw_set_audio_effect_ab_class(bool enable);
 
+void hw_play_startup_sound();
+
 
 #if defined(ARDUINO_T_LORA_PAGER)
 #define USING_BLE_KEYBOARD
