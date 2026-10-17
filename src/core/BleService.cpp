@@ -152,6 +152,8 @@ static void reply(JsonDocument& d, int id, bool ok)
 
 void BleService::_handleLine(const char* s)
 {
+    Serial.printf("[BLE] rx cmd='%s' id=%d screen_off=%d\n",
+              cmd, id, (int)PowerManager::inst().isScreenOff());
     JsonDocument d;
     if (deserializeJson(d, s) != DeserializationError::Ok) {
         JsonDocument r; r["ok"]=false; r["err"]="json"; sendJson(r);

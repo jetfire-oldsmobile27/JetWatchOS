@@ -15,6 +15,7 @@
 #include <FFat.h>
 #include <LV_Helper.h>
 #include "core/SurvivalMode.hpp"
+#include "ui/ui_splash.hpp"
 
 #include <expected>
 
@@ -196,9 +197,6 @@ static void poll_serial_time_sync() {
 //  setup / loop
 // ============================================================================
 void setup() {
-  // if (survival::isArmed()) {
-  //       survival::runSurvivalBoot();   // @note never return!
-  // }
   Serial.begin(115200);
   crash_init();
 
@@ -206,6 +204,11 @@ void setup() {
   instance.powerControl(POWER_RADIO, false);
   WiFi.mode(WIFI_OFF);
   beginLvglHelper(instance);
+
+  // ---- Splash с этого момента ----
+  ui_splash_begin();
+  ui_splash_step("Display ready", 10);
+
   lv_display_t *d = lv_display_get_default();
   lv_draw_buf_t *db = lv_display_get_buf_active(d);
   Serial.printf("[LVGL] %dx%d  data=%p  data_size=%u  render_mode=%d\n",
@@ -213,44 +216,47 @@ void setup() {
                 lv_display_get_vertical_resolution(d), db ? db->data : nullptr,
                 db ? db->data_size : 0, lv_display_get_render_mode(d));
 
+  ui_splash_step("Storage", 22);
   Database::inst().begin();
+
+  ui_splash_step("Audio subsystem", 32);
   hw_audio_init();
 
+  ui_splash_step("Background services", 45);
   datacache::begin();
-
   AlarmManager::inst().begin();
   crash_persist();
   gpslog::begin();
   PowerManager::inst().begin();
+
+  ui_splash_step("Building UI", 62);
   register_apps();
   AppManager::inst().begin();
 
+  ui_splash_step("Sensors", 78);
 #if defined(USING_BMA423_SENSOR)
-  // Обработчик — ДО bma_start(), чтобы не потерять первый IRQ
   instance.onEvent(on_sensor_event, SENSOR_EVENT, nullptr);
-
   s_bma_ready = bma_start();
   Serial.printf("[BMA] ready=%d\n", (int)s_bma_ready);
 #endif
 
   auto &cfg = Database::inst().config();
-//   if (cfg.wifi_on && cfg.wifi_ssid[0]) {
-//     wifi_conn_params_t p;
-//     p.ssid = cfg.wifi_ssid;
-//     p.password = cfg.wifi_pwd;
-//     hw_set_wifi_connect(p);
-//   }
 
+  ui_splash_step("Radio link", 90);
   if (cfg.bt_on) {
     BleService::inst().begin(proto::DEVICE_NAME);
     PowerManager::inst().setBtActive(true);
   }
 
+  ui_splash_step("Power", 96);
   instance.onEvent(on_pmu_event, POWER_EVENT, nullptr);
   hw_set_disp_backlight(cfg.brightness);
   PowerManager::inst().resetActivity();
 
+  ui_splash_step("Signal", 99);
   hw_play_startup_sound();
+
+  ui_splash_step("Ready", 100);
 
   xTaskCreatePinnedToCore(
       [](void *) {
