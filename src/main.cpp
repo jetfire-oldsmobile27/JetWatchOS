@@ -304,7 +304,7 @@ void loop() {
         PowerManager::inst().tick();
         AlarmManager::inst().tick();
     }
-    if (now - last_db_flush > 60000) {
+    if (now - last_db_flush > 20000) {
         last_db_flush = now;
         apptask_run_detached([]() {
             Database::inst().flushSteps();

@@ -1,5 +1,6 @@
 package com.jetfire_oldsmobile.jetwatchapp.hub
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.jetfire_oldsmobile.jetwatchapp.ble.WatchBle
 import com.jetfire_oldsmobile.jetwatchapp.data.Settings
@@ -108,6 +109,7 @@ object WatchHub {
                 if (_state.value.stepsDate != today) {
                     AppLog.i("HUB", "new day $today -> reset watch counters")
                     _state.update { it.copy(stepsDate = today, watchSteps = null, hcSteps = 0) }
+                    if (ble.conn.value == WatchBle.Conn.Ready) syncAll() 
                 }
 
                 if (ble.conn.value != WatchBle.Conn.Ready) connectNow()
@@ -140,6 +142,7 @@ object WatchHub {
 
     // ---------- sync ----------
 
+    @SuppressLint("StaticFieldLeak")
     suspend fun syncAll() = syncMutex.withLock {
         if (ble.conn.value != WatchBle.Conn.Ready) return@withLock
         val t0 = System.currentTimeMillis()
@@ -163,7 +166,7 @@ object WatchHub {
             ))
 
             // 30 дней истории (в карточке показываем 7, в отдельном экране — все).
-            ble.request("steps", mapOf("days" to 30))?.takeIf { it.optBoolean("ok") }?.let { r ->
+            ble.request("steps", mapOf("days" to 7))?.takeIf { it.optBoolean("ok") }?.let { r ->
                 val days = r.daysList().sortedBy { it.ymd }
                 val today = LocalDate.now().toString()
                 val watchToday = days.firstOrNull { it.ymd == today }?.steps ?: 0
@@ -192,8 +195,17 @@ object WatchHub {
                     val newDay = st.stepsDate != today
                     val prevWatch = if (newDay) 0 else (st.watchSteps ?: 0)
                     val prevHc = if (newDay) 0L else st.hcSteps
+
+                    // Если часовой `days` пуст или не содержит сегодня — вставим сегодняшний
+                    // вручную, чтобы WeekChart не показывал «нет данных».
+                    val week = if (days.isEmpty() || days.none { it.ymd == today }) {
+                        (days + DayStepsItem(today, maxOf(watchToday, totalToday.toInt())))
+                            .sortedBy { it.ymd }
+                            .takeLast(7)
+                    } else days
+
                     st.copy(
-                        week = days,
+                        week = week,
                         stepsDate = today,
                         watchSteps = if (newDay) watchToday else maxOf(prevWatch, watchToday),
                         hcSteps = if (newDay) totalToday else maxOf(prevHc, totalToday),
@@ -216,7 +228,7 @@ object WatchHub {
 
             importTrainings()
 
-            ble.request("alarm_get")?.takeIf { it.optBoolean("ok") }?.let { r ->
+            ble.request("alarm_get", timeoutMs = 12_000)?.takeIf { it.optBoolean("ok") }?.let { r ->
                 _state.update { it.copy(alarms = r.alarmsList()) }
             }
             _state.update { it.copy(lastSync = System.currentTimeMillis()) }

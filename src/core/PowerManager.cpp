@@ -33,7 +33,7 @@ void PowerManager::screenOff()
         lv_timer_t* t = lv_display_get_refr_timer(d);
         if (t) lv_timer_pause(t);
     }
-    setCpuFrequencyMhz(40);
+    setCpuFrequencyMhz(80);
 }
 
 void PowerManager::wake()

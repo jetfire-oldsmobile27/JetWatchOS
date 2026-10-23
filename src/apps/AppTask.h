@@ -45,6 +45,7 @@ void task_entry(void* arg)
     } fin{ ju.release() };            // ← теперь release отдаёт владение в fin
 
     try { j->result = j->work(); } catch (...) {}
+    vTaskDelete(nullptr); 
 }
 
 template <typename Work, typename Deliver>
@@ -57,7 +58,7 @@ void run(std::shared_ptr<AppToken> tok, Work&& work, Deliver&& deliver)
 
     BaseType_t ok = xTaskCreatePinnedToCore(
         task_entry<std::decay_t<Work>, std::decay_t<Deliver>>,
-        "apptask", 8 * 1024, j, 5, nullptr, 1);
+        "apptask", 16 * 1024, j, 5, nullptr, 0);
 
     if (ok != pdPASS) {
         delete j;

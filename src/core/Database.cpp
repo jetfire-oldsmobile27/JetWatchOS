@@ -3,10 +3,13 @@
 #include <FFat.h>
 #include <ArduinoJson.h>
 #include "PowerManager.h"
+#include <freertos/FreeRTOS.h>
 
 static const char* F_CFG   = "/cfg.json";
 static const char* F_STEPS = "/steps.json";
 static const char* F_TRAIN = "/train.json";
+
+static portMUX_TYPE s_steps_mux = portMUX_INITIALIZER_UNLOCKED;
 
 Database& Database::inst() { static Database m; return m; }
 
@@ -78,6 +81,11 @@ void Database::begin()
     struct tm t; hw_get_date_time(t);
     snprintf(_today_ymd, sizeof(_today_ymd), "%04d-%02d-%02d",
              t.tm_year+1900, t.tm_mon+1, t.tm_mday);
+
+    if (!FFat.exists(F_STEPS)) {
+        _saveStepsFile();
+        Serial.println("[DB] steps.json seeded");
+    }
 }
 
 void Database::saveConfig()
@@ -130,14 +138,18 @@ void Database::_loadStepsFile()
 
 void Database::_saveStepsFile()
 {
-    // Простое хранилище: ymd -> steps, максимум 30 дней
     JsonDocument doc;
     File f = FFat.open(F_STEPS, FILE_READ);
-    if (f) { deserializeJson(doc, f); f.close(); }
+    if (f) {
+        auto err = deserializeJson(doc, f);
+        f.close();
+        if (err != DeserializationError::Ok) {
+            Serial.printf("[DB] steps.json corrupted: %s\n", err.c_str());
+            return;
+        }
+    }
 
-    // Обрезаем старые, если больше 30
     if (doc.size() > 30) {
-        // удаляем самые старые по строковому сравнению
         std::vector<String> keys;
         for (JsonPair kv : doc.as<JsonObject>()) keys.push_back(kv.key().c_str());
         std::sort(keys.begin(), keys.end());
@@ -148,36 +160,49 @@ void Database::_saveStepsFile()
     }
     doc[_today_ymd] = _steps_today;
 
-    f = FFat.open(F_STEPS, FILE_WRITE);
-    if (f) { serializeJson(doc, f); f.close(); }
-}
-
-void Database::_rolloverDay()
-{
-    if (!datacache::time_valid()) return;
-
-    struct tm t = datacache::time();
-    char ymd[11];
-    snprintf(ymd, sizeof(ymd), "%04d-%02d-%02d",
-             t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
-
-    if (strcmp(ymd, _today_ymd) != 0) {
-        _saveStepsFile();
-        strlcpy(_today_ymd, ymd, sizeof(_today_ymd));
-        _steps_today = 0;
+    // атомарно: пишем во временный, потом переименовываем
+    const char* TMP = "/steps.tmp";
+    File t = FFat.open(TMP, FILE_WRITE);
+    if (!t) { Serial.println("[DB] steps tmp open failed"); return; }
+    if (serializeJson(doc, t) == 0) { t.close(); FFat.remove(TMP); return; }
+    t.close();
+    if (FFat.exists(F_STEPS)) FFat.remove(F_STEPS);
+    if (!FFat.rename(TMP, F_STEPS)) {
+        Serial.println("[DB] steps rename failed");
+        FFat.remove(TMP);
     }
 }
 
-void Database::addSteps(uint32_t delta)
-{
-    _rolloverDay();
-    _steps_today += delta;
+void Database::_rolloverDay() {
+    if (!datacache::time_valid()) return;
+    struct tm t = datacache::time();
+    // защита от невалидного RTC — иначе при первом time_sync сбросим всё в 0
+    if (t.tm_year + 1900 < 2024) return;
+
+    char ymd[11];
+    snprintf(ymd, sizeof(ymd), "%04d-%02d-%02d",
+             t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+    if (strcmp(ymd, _today_ymd) == 0) return;
+
+    _saveStepsFile();               // сначала сохраняем СТАРЫЙ день
+    strlcpy(_today_ymd, ymd, sizeof(_today_ymd));
+    portENTER_CRITICAL(&s_steps_mux);
+    _steps_today = 0;
+    portEXIT_CRITICAL(&s_steps_mux);
 }
 
-uint32_t Database::stepsToday()
-{
+void Database::addSteps(uint32_t delta) {
     _rolloverDay();
-    return _steps_today;
+    portENTER_CRITICAL(&s_steps_mux);
+    _steps_today += delta;
+    portEXIT_CRITICAL(&s_steps_mux);
+}
+uint32_t Database::stepsToday() {
+    _rolloverDay();
+    portENTER_CRITICAL(&s_steps_mux);
+    uint32_t v = _steps_today;
+    portEXIT_CRITICAL(&s_steps_mux);
+    return v;
 }
 
 void Database::flushSteps()
@@ -185,13 +210,36 @@ void Database::flushSteps()
     _saveStepsFile();
 }
 
-void Database::setStepsToday(uint32_t steps)
-{
+void Database::setStepsToday(uint32_t steps) {
     _rolloverDay();
     if (steps > _steps_today) {
         _steps_today = steps;
         _saveStepsFile();
     }
+}
+
+void Database::forceTodayFlush() {
+    if (!datacache::time_valid()) return;
+    struct tm t = datacache::time();
+    if (t.tm_year + 1900 < 2024) return;   // защита от мусорного RTC
+
+    char ymd[11];
+    snprintf(ymd, sizeof(ymd), "%04d-%02d-%02d",
+             t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+
+    if (strcmp(ymd, _today_ymd) == 0) {
+        // Сегодня не менялся — просто пишем актуальное значение.
+        _saveStepsFile();
+        return;
+    }
+
+    // День сменился: сохраняем СТАРЫЙ (если файла ещё нет — создастся),
+    // затем обнуляем и создаём сегодняшнюю запись.
+    _saveStepsFile();
+    strlcpy(_today_ymd, ymd, sizeof(_today_ymd));
+    _steps_today = 0;
+    _saveStepsFile();
+    Serial.printf("[DB] forceTodayFlush -> %s (fresh, 0 steps)\n", _today_ymd);
 }
 
 std::vector<StepDay> Database::stepsRange(uint16_t days_back)

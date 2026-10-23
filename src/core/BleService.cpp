@@ -23,14 +23,12 @@ void ble_set_active(bool on) { /* no-op, активность ведётся ч�
 
 class SrvCB : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* s, NimBLEConnInfo& info) override {
-        Serial.printf("[BLE] connected  addr=%s\n",
-                    info.getAddress().toString().c_str());
-
+        Serial.printf("[BLE] connected addr=%s\n", info.getAddress().toString().c_str());
         s->updateConnParams(info.getConnHandle(),
-                            /*minInterval*/ 80,
-                            /*maxInterval*/ 160,
-                            /*latency*/     4,
-                            /*timeout*/     600);
+                            /*min*/     12,
+                            /*max*/     24,
+                            /*latency*/ 0,
+                            /*timeout*/ 400);
     }
 
     void onDisconnect(NimBLEServer* s, NimBLEConnInfo& info, int reason) override {
@@ -80,8 +78,8 @@ void BleService::begin(const char* name)
     auto* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(proto::SERVICE_UUID);
     adv->enableScanResponse(true);          // было setScanResponse(true)
-    adv->setMinInterval(800);    // 500 ms
-    adv->setMaxInterval(1600);   // 1000 ms
+    adv->setMinInterval(160);   //  100 ms
+    adv->setMaxInterval(320);   //  200 ms
     NimBLEDevice::startAdvertising();
 
     _active = true;
@@ -98,14 +96,26 @@ void BleService::end()
     // НЕ deinit — оставляем стек живым, чтобы begin() снова работал
 }
 
-void BleService::_sendJson(JsonDocument& doc)
-{
+void BleService::_sendJson(JsonDocument& doc) {
     if (!_active || !s_tx) return;
     String out;
     serializeJson(doc, out);
     out += '\n';
-    s_tx->setValue(reinterpret_cast<const uint8_t*>(out.c_str()), out.length());
-    s_tx->notify();
+    const size_t chunk = 240;
+    size_t off = 0;
+    while (off < out.length()) {
+        size_t n = min(chunk, out.length() - off);
+        s_tx->setValue(reinterpret_cast<const uint8_t*>(out.c_str() + off), n);
+
+        int tries = 0;
+        while (!s_tx->notify() && ++tries < 20) delay(15);
+        if (tries >= 20) {
+            Serial.printf("[BLE] notify give up at off=%u\n", (unsigned)off);
+            return;
+        }
+        off += n;
+        delay(5);
+    }
 }
 
 void BleService::feedLine(const char* s)
@@ -152,8 +162,6 @@ static void reply(JsonDocument& d, int id, bool ok)
 
 void BleService::_handleLine(const char* s)
 {
-    Serial.printf("[BLE] rx cmd='%s' id=%d screen_off=%d\n",
-              cmd, id, (int)PowerManager::inst().isScreenOff());
     JsonDocument d;
     if (deserializeJson(d, s) != DeserializationError::Ok) {
         JsonDocument r; r["ok"]=false; r["err"]="json"; sendJson(r);
@@ -162,6 +170,8 @@ void BleService::_handleLine(const char* s)
 
     int id = d["id"] | 0;
     const char* cmd = d["cmd"] | "";
+    Serial.printf("[BLE] rx cmd='%s' id=%d screen_off=%d\n",
+              cmd, id, (int)PowerManager::inst().isScreenOff());
     auto& db = Database::inst();
     auto& cfg = db.config();
 
@@ -289,30 +299,48 @@ void BleService::_handleLine(const char* s)
         db.trainingClear(d["tid"] | 0);
         JsonDocument r; reply(r, id, true);
     }
-    // else if (!strcmp(cmd, "time_sync")) { // @todo broken!
-    //     time_t ts = (time_t)(uint32_t)(d["unix"] | 0u);
-    //     int tz_min = d["tz"] | (int)cfg.tz_offset_min;
+    else if (!strcmp(cmd, "time_sync")) {
+        time_t ts       = (time_t)(uint32_t)(d["unix"] | 0u);
+        int    tz_sec   = d["tz"] | (int)(cfg.tz_offset_min * 60);
 
-    //     time_t local_unix = ts + (time_t)tz_min * 60;
-    //     struct tm local;
-    //     gmtime_r(&local_unix, &local);
+        if (ts < 1700000000) {           // мусор / не выставлено
+            JsonDocument r; r["ok"] = false; r["err"] = "bad unix";
+            reply(r, id, false);
+            return;
+        }
 
-    //     Serial.printf("[TIME] rx unix=%ld tz=%d -> %04d-%02d-%02d %02d:%02d:%02d\n",
-    //                 (long)ts, tz_min,
-    //                 local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
-    //                 local.tm_hour, local.tm_min, local.tm_sec);
+        time_t local_unix = ts + (time_t)tz_sec;
+        struct tm local;
+        gmtime_r(&local_unix, &local);
 
-    //     if (hw_get_device_online() & HW_RTC_ONLINE) {
-    //         instance.rtc.setDateTime(
-    //             local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
-    //             local.tm_hour, local.tm_min, local.tm_sec);
-    //     }
+        Serial.printf("[TIME] rx unix=%ld tz=%ds -> %04d-%02d-%02d %02d:%02d:%02d\n",
+                    (long)ts, tz_sec,
+                    local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+                    local.tm_hour, local.tm_min, local.tm_sec);
 
-    //     JsonDocument r;
-    //     r["ok"]    = true;
-    //     r["local"] = (uint32_t)local_unix;
-    //     reply(r, id, true);
-    // }
+        if (hw_get_device_online() & HW_RTC_ONLINE) {
+            instance.rtc.setDateTime(
+                local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+                local.tm_hour, local.tm_min, local.tm_sec);
+        }
+
+        // Дать datacache шанс перечитать RTC — иначе forceTodayFlush
+        // увидит старый s_time. Один прямой вызов hw_get_date_time надёжнее,
+        // чем ждать тикер.
+        struct tm tt = {};
+        hw_get_date_time(tt);
+        if (tt.tm_year + 1900 >= 2024) {
+            Database::inst().forceTodayFlush();
+        }
+
+        cfg.tz_offset_min = (int16_t)(tz_sec / 60);
+        db.saveConfig();
+
+        JsonDocument r;
+        r["ok"]    = true;
+        r["local"] = (uint32_t)local_unix;
+        reply(r, id, true);
+    }
     else if (!strcmp(cmd, "steps_set")) {
         uint32_t s = d["steps"] | 0u;
         db.setStepsToday(s);

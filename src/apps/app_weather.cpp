@@ -104,6 +104,11 @@ private:
                     http.end();
                     return r;
                 }
+                else if (code == -1 || code == 0) { 
+                    snprintf(r.err, sizeof(r.err), "connect");
+                    http.end();
+                    return r;
+                }
                 String body = http.getString();
                 http.end();
 

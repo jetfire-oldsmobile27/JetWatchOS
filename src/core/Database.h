@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <cstdint>
 #include <vector>
 #include <time.h>
 
@@ -37,10 +38,11 @@ struct UserConfig {
     AlarmEntry alarms[5];
     uint8_t face_idx = 0;
     bool    gps_on        = true;
-    bool    gps_time_sync = false;   
+    bool    gps_time_sync = false; 
     int16_t tz_offset_min = 180; // +3:00
     bool sounds_on = true;
     bool power_save = false;
+    uint16_t goal{10'000}; // steps target
 };
 
 class Database {
@@ -64,6 +66,8 @@ public:
     UserConfig& config() { return _cfg; }
     void saveConfig();
     void setStepsToday(uint32_t steps);
+
+    void forceTodayFlush();
 
 private:
     UserConfig _cfg{};

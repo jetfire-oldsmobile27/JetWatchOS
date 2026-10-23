@@ -172,6 +172,7 @@ static void set_needle(lv_obj_t* line, lv_point_precise_t pts[2], float deg)
     lv_line_set_points(line, pts, 2);
 }
 
+// @todo goal overflow and ignore goal from android app
 void face_default_update()
 {
     if (!l_h || !l_m || !l_s || !line_batt || !line_steps) return;
