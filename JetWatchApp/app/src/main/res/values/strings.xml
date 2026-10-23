@@ -93,4 +93,8 @@
     <string name="log_title">service.log</string>
     <string name="log_clear">Clear</string>
     <string name="log_search">Search (%1$d lines)</string>
+
+    <string name="home_searching">Searching…</string>
+    <string name="common_syncing">Syncing…</string>
+    <string name="common_in_progress">Already running…</string>
 </resources>

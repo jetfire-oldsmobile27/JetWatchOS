@@ -93,4 +93,8 @@
     <string name="log_title">service.log</string>
     <string name="log_clear">Очистить</string>
     <string name="log_search">Поиск (строк: %1$d)</string>
+
+    <string name="home_searching">Поиск…</string>
+    <string name="common_syncing">Синхронизация…</string>
+    <string name="common_in_progress">Уже запущено…</string>
 </resources>

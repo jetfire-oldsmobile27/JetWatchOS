@@ -41,6 +41,7 @@ fun HomeScreen(
     val ctx = LocalContext.current
     val st by vm.state.collectAsStateWithLifecycle()
     val cfg by vm.settings.collectAsStateWithLifecycle()
+    val busy by vm.busy.collectAsStateWithLifecycle()
     var tick by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++; vm.refreshHealth() }
 
@@ -48,8 +49,8 @@ fun HomeScreen(
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { tick++ }
     val hcLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { vm.refreshHealth() }
 
-    val bleOk = remember(tick) { hasBle(ctx) }
-    val notifOk = remember(tick) { hasPostNotif(ctx) }
+    val bleOk      = remember(tick) { hasBle(ctx) }
+    val notifOk    = remember(tick) { hasPostNotif(ctx) }
     val listenerOk = remember(tick) { hasListener(ctx) }
 
     LazyColumn(
@@ -58,14 +59,14 @@ fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         item { Spacer(Modifier.height(8.dp)) }
-        item { StepsRing(st.todaySteps, cfg.goal, st.syncing) }
+        item { StepsRing(st.todaySteps, cfg.goal, st.syncing || busy == "sync") }
 
         item {
             SectionCard(stringResource(R.string.home_watch_title)) {
                 val connText = when (st.conn) {
-                    WatchBle.Conn.Ready -> stringResource(R.string.home_connected)
-                    WatchBle.Conn.Scanning -> stringResource(R.string.home_scanning)
-                    WatchBle.Conn.Connecting -> stringResource(R.string.home_connecting)
+                    WatchBle.Conn.Ready        -> stringResource(R.string.home_connected)
+                    WatchBle.Conn.Scanning     -> stringResource(R.string.home_scanning)
+                    WatchBle.Conn.Connecting   -> stringResource(R.string.home_connecting)
                     WatchBle.Conn.Disconnected -> stringResource(R.string.home_disconnected)
                 }
                 Text(
@@ -82,23 +83,21 @@ fun HomeScreen(
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (st.hcSteps > 0)
-                    Text(stringResource(R.string.home_hc_today, st.hcSteps), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.home_hc_today, st.hcSteps),
+                        style = MaterialTheme.typography.bodySmall)
                 st.lastError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { vm.sync() }, enabled = !st.syncing && bleOk) {
-                        Text(stringResource(R.string.home_sync_now))
-                    }
-                    if (st.conn == WatchBle.Conn.Ready) OutlinedButton(onClick = { vm.disconnect() }) {
-                        Text(stringResource(R.string.home_disconnect))
-                    } else OutlinedButton(onClick = { vm.connect(cfg.address == null) }, enabled = bleOk) {
-                        Text(if (cfg.address == null) stringResource(R.string.home_find_watch) else stringResource(R.string.home_connect))
-                    }
-                }
+
+                WatchControlButtons(vm, st, cfg, bleOk)
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.home_bg_service), Modifier.weight(1f))
-                    Switch(checked = st.serviceRunning, enabled = bleOk, onCheckedChange = {
-                        if (it) WatchService.start(ctx) else WatchService.stop(ctx)
-                    })
+                    Switch(
+                        checked = st.serviceRunning,
+                        enabled = bleOk && busy == null,
+                        onCheckedChange = {
+                            if (it) WatchService.start(ctx) else WatchService.stop(ctx)
+                        },
+                    )
                 }
                 TextButton(onClick = onOpenLogs) { Text(stringResource(R.string.home_open_log)) }
             }
@@ -106,8 +105,9 @@ fun HomeScreen(
 
         item {
             WeekChart(
-                week = st.week.map { it.ymd to it.steps },
-                goal = cfg.goal,
+                week    = st.week.map { it.ymd to it.steps },
+                goal    = cfg.goal,
+                syncing = st.syncing || busy == "sync",
                 onClick = onOpenStats,
             )
         }
@@ -138,9 +138,9 @@ fun HomeScreen(
                     HcStatus.NoPermission -> Button(onClick = { hcLauncher.launch(WatchHub.hc.permissions) }) {
                         Text(stringResource(R.string.home_allow_hc))
                     }
-                    HcStatus.NeedsUpdate -> Text(stringResource(R.string.home_hc_update))
-                    HcStatus.Unavailable -> Text(stringResource(R.string.home_hc_unavailable))
-                    HcStatus.Ready -> {}
+                    HcStatus.NeedsUpdate  -> Text(stringResource(R.string.home_hc_update))
+                    HcStatus.Unavailable  -> Text(stringResource(R.string.home_hc_unavailable))
+                    HcStatus.Ready        -> {}
                 }
             }
         }
@@ -148,13 +148,85 @@ fun HomeScreen(
     }
 }
 
+/**
+ * Sync + Connect/Disconnect в одном блоке.
+ * Каждое нажатие либо мгновенно запускает операцию со спиннером на кнопке,
+ * либо игнорируется (кнопка disabled), пока предыдущая ещё не завершилась.
+ */
 @Composable
-private fun WeekChart(week: List<Pair<String, Int>>, goal: Int, onClick: () -> Unit) {
+private fun WatchControlButtons(
+    vm: WatchViewModel,
+    st: com.jetfire_oldsmobile.jetwatchapp.hub.WatchState,
+    cfg: com.jetfire_oldsmobile.jetwatchapp.data.Settings,
+    bleOk: Boolean,
+) {
+    val busy by vm.busy.collectAsStateWithLifecycle()
+
+    val inSync     = busy == "sync" || st.syncing
+    val inScan     = busy == "scan" || st.conn == WatchBle.Conn.Scanning
+    val inConnect  = busy == "connect" || st.conn == WatchBle.Conn.Connecting
+    val connecting = inScan || inConnect
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // ---- Sync now ----
+        Button(
+            onClick  = { vm.sync() },
+            enabled  = bleOk && st.conn == WatchBle.Conn.Ready && busy == null && !st.syncing,
+        ) {
+            if (inSync) {
+                InlineSpinner()
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.home_syncing))
+            } else {
+                Text(stringResource(R.string.home_sync_now))
+            }
+        }
+
+        // ---- Connect / Search / Disconnect ----
+        when {
+            connecting -> OutlinedButton(onClick = {}, enabled = false) {
+                InlineSpinner()
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(
+                    if (inScan) R.string.home_scanning else R.string.home_connecting))
+            }
+            st.conn == WatchBle.Conn.Ready -> OutlinedButton(onClick = { vm.disconnect() }) {
+                Text(stringResource(R.string.home_disconnect))
+            }
+            else -> Button(
+                onClick = { vm.connect(cfg.address == null) },
+                enabled = bleOk && busy == null,
+            ) {
+                Text(stringResource(
+                    if (cfg.address == null) R.string.home_find_watch
+                    else R.string.home_connect))
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeekChart(
+    week: List<Pair<String, Int>>,
+    goal: Int,
+    syncing: Boolean,
+    onClick: () -> Unit,
+) {
     SectionCard(
         title = stringResource(R.string.home_week_title),
         modifier = Modifier.clickable(onClick = onClick),
     ) {
-        if (week.isEmpty()) { Text(stringResource(R.string.home_week_empty)); return@SectionCard }
+        if (week.isEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (syncing) {
+                    InlineSpinner()
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(stringResource(
+                    if (syncing) R.string.home_syncing else R.string.home_week_empty))
+            }
+            return@SectionCard
+        }
         val max = maxOf(goal, week.maxOf { it.second }).toFloat()
         Row(
             Modifier.fillMaxWidth().height(130.dp),
@@ -167,20 +239,24 @@ private fun WeekChart(week: List<Pair<String, Int>>, goal: Int, onClick: () -> U
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom,
                 ) {
-                    Text("${steps / 1000}.${(steps % 1000) / 100}k", style = MaterialTheme.typography.labelSmall)
+                    Text("${steps / 1000}.${(steps % 1000) / 100}k",
+                        style = MaterialTheme.typography.labelSmall)
                     Box(
                         Modifier.fillMaxWidth()
                             .fillMaxHeight((steps / max).coerceIn(0.03f, 0.8f))
                             .background(
-                                if (steps >= goal) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                                if (steps >= goal) MaterialTheme.colorScheme.tertiary
+                                else MaterialTheme.colorScheme.primary,
                                 RoundedCornerShape(6.dp)
                             )
                     )
                     Text(
                         runCatching {
-                            LocalDate.parse(ymd).dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                            LocalDate.parse(ymd)
+                                .dayOfWeek
+                                .getDisplayName(TextStyle.SHORT, Locale.getDefault())
                         }.getOrDefault("?"),
-                        style = MaterialTheme.typography.labelSmall
+                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
             }

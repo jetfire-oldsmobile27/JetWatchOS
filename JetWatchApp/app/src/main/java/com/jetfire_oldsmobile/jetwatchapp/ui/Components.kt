@@ -125,3 +125,58 @@ fun SectionCard(
         }
     }
 }
+
+@Composable
+fun InlineSpinner(
+    modifier: Modifier = Modifier,
+    color: Color = LocalContentColor.current,
+) = CircularProgressIndicator(
+    modifier = modifier.size(16.dp),
+    strokeWidth = 2.dp,
+    color = color,
+)
+
+/** Кнопка, которая показывает спиннер пока `pending`, и блокируется. */
+@Composable
+fun CmdButton(
+    text: String,
+    pending: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled && !pending,
+        modifier = modifier,
+        colors = colors,
+    ) {
+        if (pending) {
+            InlineSpinner()
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(text)
+    }
+}
+
+@Composable
+fun CmdOutlinedButton(
+    text: String,
+    pending: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled && !pending,
+        modifier = modifier,
+    ) {
+        if (pending) {
+            InlineSpinner()
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(text)
+    }
+}

@@ -34,7 +34,8 @@ data class WatchState(
     val lastError: String? = null,
     /** Локальная дата, к которой относятся накопленные счётчики. При смене дня сбрасываем. */
     val stepsDate: String = LocalDate.now().toString(),
-    val powerSave: Boolean = false
+    val powerSave: Boolean = false,
+    val inFlightCmds: Set<String> = emptySet(),
 ) {
     /**
      * Приоритет: телефон (Health Connect, все источники) → данные часов за сегодня → максимум из недели.
@@ -278,8 +279,21 @@ object WatchHub {
     // ---------- commands from UI ----------
 
     suspend fun command(name: String, extras: Map<String, Any?> = emptyMap()): JSONObject? {
-        if (ble.conn.value != WatchBle.Conn.Ready && !connectNow()) return null
-        return ble.request(name, extras)
+        var reserved = false
+        _state.update { st ->
+            if (name in st.inFlightCmds) st
+            else { reserved = true; st.copy(inFlightCmds = st.inFlightCmds + name) }
+        }
+        if (!reserved) {
+            AppLog.w("HUB", "cmd '$name' already in flight, ignored")
+            return null
+        }
+        try {
+            if (ble.conn.value != WatchBle.Conn.Ready && !connectNow()) return null
+            return ble.request(name, extras)
+        } finally {
+            _state.update { it.copy(inFlightCmds = it.inFlightCmds - name) }
+        }
     }
 
     // ---------- events from the watch ----------

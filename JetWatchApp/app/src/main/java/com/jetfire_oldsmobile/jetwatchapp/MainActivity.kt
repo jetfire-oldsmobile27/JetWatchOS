@@ -5,7 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -16,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -69,18 +74,29 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                 ) { pad ->
-                    NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-                        composable("home") {
-                            HomeScreen(
-                                vm,
-                                onOpenLogs = { nav.navigate("logs") },
-                                onOpenStats = { nav.navigate("stats") },
+                    val busy by vm.busy.collectAsStateWithLifecycle()
+                    val st by vm.state.collectAsStateWithLifecycle()
+                    val inProgress = busy != null || st.syncing || st.inFlightCmds.isNotEmpty()
+
+                    Column(Modifier.padding(pad)) {
+                        if (inProgress) {
+                            LinearProgressIndicator(
+                                Modifier.fillMaxWidth().height(2.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
                             )
                         }
-                        composable("control") { ControlScreen(vm) }
-                        composable("apps") { AppsScreen(vm) }
-                        composable("logs") { LogScreen(onBack = { nav.popBackStack() }) }
-                        composable("stats") { StatsScreen(vm, onBack = { nav.popBackStack() }) }
+                        NavHost(nav, startDestination = "home",
+                            modifier = Modifier.weight(1f)) {
+                            composable("home") {
+                                HomeScreen(vm, onOpenLogs = { nav.navigate("logs") },
+                                    onOpenStats = { nav.navigate("stats") })
+                            }
+                            composable("control") { ControlScreen(vm) }
+                            composable("apps")    { AppsScreen(vm) }
+                            composable("logs")    { LogScreen(onBack = { nav.popBackStack() }) }
+                            composable("stats")   { StatsScreen(vm, onBack = { nav.popBackStack() }) }
+                        }
                     }
                 }
             }
