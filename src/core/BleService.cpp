@@ -376,9 +376,24 @@ void BleService::_handleLine(const char* s)
 // BleService.cpp — зеркалит механизм, которым уже пользуются
 // eventTrainingStart/eventTrainingEnd, но без обёртки "ev"
 void BleService::sendJson(const char* json) {
-    if (!_connected || !_txChar) return;   // подставьте свои поля
+    if (!_active || !s_tx) return;
+
     std::string line(json);
     line.push_back('\n');
-    _txChar->setValue((uint8_t*)line.data(), line.size());
-    _txChar->notify();
+
+    const size_t chunk = 240;
+    size_t off = 0;
+    while (off < line.size()) {
+        size_t n = std::min(chunk, line.size() - off);
+        s_tx->setValue(reinterpret_cast<const uint8_t*>(line.data() + off), n);
+
+        int tries = 0;
+        while (!s_tx->notify() && ++tries < 20) delay(15);
+        if (tries >= 20) {
+            Serial.printf("[BLE] notify give up at off=%u\n", (unsigned)off);
+            return;
+        }
+        off += n;
+        delay(5);
+    }
 }
