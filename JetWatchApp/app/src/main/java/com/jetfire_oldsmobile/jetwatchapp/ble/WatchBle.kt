@@ -54,6 +54,8 @@ class WatchBle(private val ctx: Context) {
     private val nextId = AtomicInteger(1)
     private val inBuf = ByteArrayOutputStream()
 
+    var onCommand: ((String, JSONObject) -> Boolean)? = null
+
     
     private fun refreshGattCache(dev: BluetoothDevice) {
         runCatching {
@@ -194,6 +196,18 @@ class WatchBle(private val ctx: Context) {
             AppLog.w("BLE", "bad json: ${e.message}"); return
         }
         if (o.has("ev")) { events.tryEmit(o); return }
+        if (o.has("cmd") && !o.has("ev")) {
+            val handled = onCommand?.invoke(o.optString("cmd"), o) ?: false
+            if (handled) {
+                val ack = JSONObject()
+                    .put("id", o.optInt("id", -1))
+                    .put("ok", true)
+                    .toString()
+                // send() — suspend, запускаем в scope
+                WatchHub.scope.launch { send(ack) }
+            }
+            return
+        }
         val id = o.optInt("id", -1)
         pending.remove(id)?.complete(o)
     }

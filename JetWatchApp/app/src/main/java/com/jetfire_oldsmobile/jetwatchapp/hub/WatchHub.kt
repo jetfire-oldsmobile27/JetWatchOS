@@ -17,6 +17,7 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.ZoneId
+import com.jetfire_oldsmobile.jetwatchapp.media.MediaController
 
 data class WatchState(
     val conn: WatchBle.Conn = WatchBle.Conn.Disconnected,
@@ -37,6 +38,8 @@ data class WatchState(
     val powerSave: Boolean = false,
     val inFlightCmds: Set<String> = emptySet(),
 ) {
+    private lateinit var media: MediaController
+
     /**
      * Приоритет: телефон (Health Connect, все источники) → данные часов за сегодня → максимум из недели.
      * Никогда не берём меньше уже накопленного за сегодня.
@@ -75,6 +78,17 @@ object WatchHub {
         _settings.value = store.load()
         ble = WatchBle(app)
         hc = HealthConnectManager(app)
+        media = MediaController(app)
+        ble.onCommand = { cmd, _ ->
+            when (cmd) {
+                "media_next"       -> { media.next();       true }
+                "media_prev"       -> { media.previous();   true }
+                "media_play_pause" -> { media.playPause();  true }
+                "media_vol_up"     -> { media.volUp();      true }
+                "media_vol_down"   -> { media.volDown();    true }
+                else -> false
+            }
+        }
         ble.conn.onEach { c ->
             AppLog.i("HUB", "connection -> $c")
             _state.update { it.copy(conn = c) }
@@ -108,9 +122,14 @@ object WatchHub {
                 // Смена суток: сбрасываем счётчики, чтобы не тащить вчерашнее.
                 val today = LocalDate.now().toString()
                 if (_state.value.stepsDate != today) {
-                    AppLog.i("HUB", "new day $today -> reset watch counters")
+                    val prevDate = _state.value.stepsDate
+                    val prevSteps = _state.value.todaySteps.toLong()   // уже max(hc, watch, week)
+                    if (hcWritable && prevSteps > 0) {
+                        runCatching { hc.writeDailySteps(prevDate, prevSteps) }
+                            .onFailure { AppLog.e("HC", "final write $prevDate", it) }
+                    }
                     _state.update { it.copy(stepsDate = today, watchSteps = null, hcSteps = 0) }
-                    if (ble.conn.value == WatchBle.Conn.Ready) syncAll() 
+                    if (ble.conn.value == WatchBle.Conn.Ready) syncAll()
                 }
 
                 if (ble.conn.value != WatchBle.Conn.Ready) connectNow()
@@ -150,6 +169,13 @@ object WatchHub {
         _state.update { it.copy(syncing = true, lastError = null) }
         try {
             hcWritable = runCatching { hc.status() == HcStatus.Ready }.getOrDefault(false)
+            when (name) {
+                "media_next"      -> { media.next();      return JSONObject().put("ok", true) }
+                "media_prev"      -> { media.previous();  return JSONObject().put("ok", true) }
+                "media_play_pause"-> { media.playPause(); return JSONObject().put("ok", true) }
+                "media_vol_up"    -> { media.volUp();     return JSONObject().put("ok", true) }
+                "media_vol_down"  -> { media.volDown();   return JSONObject().put("ok", true) }
+            }
 
             ble.request("ping")?.takeIf { it.optBoolean("ok") }?.let { p ->
                 _state.update { 

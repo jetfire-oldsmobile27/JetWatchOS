@@ -3,6 +3,7 @@
 #include "core/PowerManager.h"
 #include "AppTask.h"
 #include "hal/hw.h"
+#include "core/BleService.h"
 
 class MusicApp final : public App {
 public:
@@ -51,7 +52,16 @@ private:
         lv_obj_add_event_cb(b, [](lv_event_t* e){
             auto k = (media_key_value_t)(intptr_t)lv_event_get_user_data(e);
             PowerManager::inst().resetActivity();
-            apptask_run_detached([k]() { hw_set_ble_key(k); });
+            // app_music.cpp, внутри лямбды кнопки
+apptask_run_detached([k]() {
+    switch (k) {
+        case MEDIA_NEXT:       BleService::inst().sendJson("{\"cmd\":\"media_next\"}");      break;
+        case MEDIA_PREVIOUS:   BleService::inst().sendJson("{\"cmd\":\"media_prev\"}");      break;
+        case MEDIA_PLAY_PAUSE: BleService::inst().sendJson("{\"cmd\":\"media_play_pause\"}"); break;
+        case MEDIA_VOLUME_UP:  BleService::inst().sendJson("{\"cmd\":\"media_vol_up\"}");   break;
+        case MEDIA_VOLUME_DOWN:BleService::inst().sendJson("{\"cmd\":\"media_vol_down\"}"); break;
+    }
+});
         }, LV_EVENT_CLICKED, (void*)(intptr_t)key);
 
         lv_obj_t* l = lv_label_create(b);

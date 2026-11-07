@@ -372,3 +372,13 @@ void BleService::_handleLine(const char* s)
         reply(r, id, false);
     }
 }
+
+// BleService.cpp — зеркалит механизм, которым уже пользуются
+// eventTrainingStart/eventTrainingEnd, но без обёртки "ev"
+void BleService::sendJson(const char* json) {
+    if (!_connected || !_txChar) return;   // подставьте свои поля
+    std::string line(json);
+    line.push_back('\n');
+    _txChar->setValue((uint8_t*)line.data(), line.size());
+    _txChar->notify();
+}

@@ -29,5 +29,7 @@ private:
     size_t _line_len = 0;
 
     void _handleLine(const char* s);
+public:
     void _sendJson(JsonDocument& doc);
+    void sendJson(const char* json);   // пишет <json>+'\n' в TX-характеристику
 };
