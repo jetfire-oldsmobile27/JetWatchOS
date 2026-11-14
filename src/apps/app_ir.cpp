@@ -72,14 +72,15 @@ static const TvModel tvModels[] = {
 
 // ------------- AC brands (через IRac) -------------
 static const AcModel acModels[] = {
-    {"Daikin",     decode_type_t::DAIKIN},
+    {"Haier",      decode_type_t::HAIER_AC},
     {"Gree",       decode_type_t::GREE},
+    {"Daikin",     decode_type_t::DAIKIN},
     {"Midea",      decode_type_t::MIDEA},
     {"Mitsubishi", decode_type_t::MITSUBISHI_AC},
     {"LG",         decode_type_t::LG},
     {"Samsung",    decode_type_t::SAMSUNG_AC},
     {"Panasonic",  decode_type_t::PANASONIC_AC},
-    {"Haier",      decode_type_t::HAIER_AC},
+    
 };
 
 // ------------- AC state enumerations -------------

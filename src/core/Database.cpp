@@ -39,6 +39,8 @@ void Database::begin()
     if (!FFat.begin(true)) {
         Serial.println("[DB] FFat mount failed");
     }
+    if (!_file_mux) _file_mux = xSemaphoreCreateMutex();
+
     _applyDefaults();
 
     // cfg
@@ -138,6 +140,12 @@ void Database::_loadStepsFile()
 
 void Database::_saveStepsFile()
 {
+    if (!_file_mux) return;
+    if (xSemaphoreTake(_file_mux, pdMS_TO_TICKS(3000)) != pdTRUE) {
+        Serial.println("[DB] save steps: mutex timeout");
+        return;
+    }
+
     JsonDocument doc;
     File f = FFat.open(F_STEPS, FILE_READ);
     if (f) {
@@ -145,7 +153,7 @@ void Database::_saveStepsFile()
         f.close();
         if (err != DeserializationError::Ok) {
             Serial.printf("[DB] steps.json corrupted: %s\n", err.c_str());
-            return;
+            doc.clear();
         }
     }
 
@@ -160,36 +168,62 @@ void Database::_saveStepsFile()
     }
     doc[_today_ymd] = _steps_today;
 
-    // атомарно: пишем во временный, потом переименовываем
     const char* TMP = "/steps.tmp";
+
+    // Ключевой фикс: файл мог остаться «полу-записанным» после паники/ребута,
+    // и File::open(TMP, FILE_WRITE) его не переоткроет.
+    if (FFat.exists(TMP)) {
+        if (!FFat.remove(TMP)) {
+            Serial.println("[DB] steps tmp stale, remove failed");
+        }
+    }
+
     File t = FFat.open(TMP, FILE_WRITE);
-    if (!t) { Serial.println("[DB] steps tmp open failed"); return; }
-    if (serializeJson(doc, t) == 0) { t.close(); FFat.remove(TMP); return; }
+    if (!t) {
+        Serial.println("[DB] steps tmp open failed");
+        xSemaphoreGive(_file_mux);
+        return;
+    }
+    if (serializeJson(doc, t) == 0) {
+        t.close(); FFat.remove(TMP);
+        xSemaphoreGive(_file_mux);
+        return;
+    }
     t.close();
+
     if (FFat.exists(F_STEPS)) FFat.remove(F_STEPS);
     if (!FFat.rename(TMP, F_STEPS)) {
         Serial.println("[DB] steps rename failed");
         FFat.remove(TMP);
     }
+    xSemaphoreGive(_file_mux);
 }
 
-void Database::_rolloverDay() {
+void Database::_rolloverDay()
+{
     if (!datacache::time_valid()) return;
     struct tm t = datacache::time();
-    // защита от невалидного RTC — иначе при первом time_sync сбросим всё в 0
     if (t.tm_year + 1900 < 2024) return;
 
     char ymd[11];
     snprintf(ymd, sizeof(ymd), "%04d-%02d-%02d",
              t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+
     if (strcmp(ymd, _today_ymd) == 0) return;
 
-    _saveStepsFile();               // сначала сохраняем СТАРЫЙ день
+    if (strcmp(ymd, _today_ymd) < 0) {
+        Serial.printf("[DB] RTC rollback %s -> %s ignored\n", _today_ymd, ymd);
+        return;
+    }
+
+    _saveStepsFile();
     strlcpy(_today_ymd, ymd, sizeof(_today_ymd));
     portENTER_CRITICAL(&s_steps_mux);
     _steps_today = 0;
     portEXIT_CRITICAL(&s_steps_mux);
 }
+
+
 
 void Database::addSteps(uint32_t delta) {
     _rolloverDay();
@@ -214,32 +248,37 @@ void Database::setStepsToday(uint32_t steps) {
     _rolloverDay();
     if (steps > _steps_today) {
         _steps_today = steps;
-        _saveStepsFile();
     }
 }
 
-void Database::forceTodayFlush() {
+void Database::forceTodayFlush()
+{
     if (!datacache::time_valid()) return;
     struct tm t = datacache::time();
-    if (t.tm_year + 1900 < 2024) return;   // защита от мусорного RTC
+    if (t.tm_year + 1900 < 2024) return;
 
     char ymd[11];
     snprintf(ymd, sizeof(ymd), "%04d-%02d-%02d",
              t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
 
     if (strcmp(ymd, _today_ymd) == 0) {
-        // Сегодня не менялся — просто пишем актуальное значение.
         _saveStepsFile();
         return;
     }
+    if (strcmp(ymd, _today_ymd) < 0) {
+        _saveStepsFile();
+        Serial.printf("[DB] forceTodayFlush rollback %s -> %s ignored\n",
+                      _today_ymd, ymd);
+        return;
+    }
 
-    // День сменился: сохраняем СТАРЫЙ (если файла ещё нет — создастся),
-    // затем обнуляем и создаём сегодняшнюю запись.
     _saveStepsFile();
     strlcpy(_today_ymd, ymd, sizeof(_today_ymd));
+    portENTER_CRITICAL(&s_steps_mux);
     _steps_today = 0;
+    portEXIT_CRITICAL(&s_steps_mux);
     _saveStepsFile();
-    Serial.printf("[DB] forceTodayFlush -> %s (fresh, 0 steps)\n", _today_ymd);
+    Serial.printf("[DB] forceTodayFlush -> %s (fresh)\n", _today_ymd);
 }
 
 std::vector<StepDay> Database::stepsRange(uint16_t days_back)

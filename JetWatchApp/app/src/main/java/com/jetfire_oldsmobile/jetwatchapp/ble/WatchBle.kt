@@ -123,6 +123,17 @@ class WatchBle(private val ctx: Context) {
         failPending()
     }
 
+    @Suppress("DEPRECATION")
+    fun forgetDevice() {
+        val addr = deviceAddress ?: return
+        AppLog.i("BLE", "forget $addr")
+        closeGatt()
+        runCatching {
+            val dev = mgr?.adapter?.getRemoteDevice(addr)
+            dev?.javaClass?.getMethod("removeBond")?.invoke(dev)
+        }
+    }
+
     private fun failPending() {
         val err = JSONObject().put("ok", false).put("err", "disconnected")
         pending.values.forEach { it.complete(err) }

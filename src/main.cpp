@@ -139,6 +139,7 @@ static void register_apps() {
   m.registerApp("Alarm", &img_alarm, app_alarm_make);
   m.registerApp("Stopwatch", &img_timer, app_stopwatch_make);
   m.registerApp("Flashlight", &img_flash, app_flashlight_make);
+  m.registerApp("IR", &img_test, app_ir_make);
   m.registerApp("Terminal", &img_test, app_terminal_make);
   m.registerApp("Settings", &img_settings, app_settings_make);
 }
@@ -279,13 +280,13 @@ void loop() {
     CRASH_MARK("instance.loop");
     instance.loop();
 
+    CRASH_MARK("notif.poll");
+    app_notifications_poll();
+
     CRASH_MARK("lv_task");
     uint32_t now = millis();
     if (PowerManager::inst().isScreenOff()) {
-        if (now - last_lv >= 200) {
-            last_lv = now;
-            lv_task_handler();
-        }
+        if (now - last_lv >= 200) { last_lv = now; lv_task_handler(); }
     } else {
         last_lv = now;
         lv_task_handler();

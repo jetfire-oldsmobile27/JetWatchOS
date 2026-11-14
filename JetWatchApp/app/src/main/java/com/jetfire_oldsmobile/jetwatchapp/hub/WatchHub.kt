@@ -56,10 +56,12 @@ data class WatchState(
 }
 
 /** Process-wide singleton shared by UI, foreground service and notification listener. */
+@SuppressLint("StaticFieldLeak")
 object WatchHub {
     private lateinit var app: Context
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     lateinit var ble: WatchBle
+    lateinit var media: MediaController
     lateinit var hc: HealthConnectManager
     private lateinit var store: SettingsStore
 
@@ -82,10 +84,10 @@ object WatchHub {
         ble.onCommand = { cmd, _ ->
             when (cmd) {
                 "media_next"       -> { media.next();       true }
-                "media_prev"       -> { media.previous();   true }
-                "media_play_pause" -> { media.playPause();  true }
-                "media_vol_up"     -> { media.volUp();      true }
-                "media_vol_down"   -> { media.volDown();    true }
+                "media_prev"       -> { media.prev();   true }
+                "media_play_pause" -> { media.togglePlayPause();  true }
+                "media_vol_up"     -> { media.volumeUp();      true }
+                "media_vol_down"   -> { media.volumeDown();    true }
                 else -> false
             }
         }
@@ -117,33 +119,60 @@ object WatchHub {
 
     private suspend fun runLoop() {
         AppLog.i("HUB", "loop started")
+        var lastMediaKey = ""
+        var lastMediaAt  = 0L
+
         while (currentCoroutineContext().isActive) {
             try {
-                // Смена суток: сбрасываем счётчики, чтобы не тащить вчерашнее.
                 val today = LocalDate.now().toString()
-                if (_state.value.stepsDate != today) {
-                    val prevDate = _state.value.stepsDate
-                    val prevSteps = _state.value.todaySteps.toLong()   // уже max(hc, watch, week)
-                    if (hcWritable && prevSteps > 0) {
-                        runCatching { hc.writeDailySteps(prevDate, prevSteps) }
-                            .onFailure { AppLog.e("HC", "final write $prevDate", it) }
-                    }
+                if (_state.value.stepsDate != today && _state.value.stepsDate < today) {
                     _state.update { it.copy(stepsDate = today, watchSteps = null, hcSteps = 0) }
+                    updateSettings { it.copy(lastStepsDate = today,
+                                             lastWatchSteps = 0, lastHcSteps = 0L) }
                     if (ble.conn.value == WatchBle.Conn.Ready) syncAll()
                 }
 
                 if (ble.conn.value != WatchBle.Conn.Ready) connectNow()
+
                 val s = settings.value
-                val due = System.currentTimeMillis() - state.value.lastSync > s.syncIntervalMin * 60_000L
-                if (ble.conn.value == WatchBle.Conn.Ready && due) syncAll()
+                val dueSync = System.currentTimeMillis() - state.value.lastSync >
+                              s.syncIntervalMin * 60_000L
+                if (ble.conn.value == WatchBle.Conn.Ready && dueSync) syncAll()
+
+                // media_state: независимо от sync, каждые 3 с, только при изменении
+                if (ble.conn.value == WatchBle.Conn.Ready &&
+                    System.currentTimeMillis() - lastMediaAt > 3_000) {
+                    val ms = runCatching { media.snapshot() }.getOrNull()
+                    if (ms != null) {
+                        val key = "${ms.title}|${ms.artist}|${ms.playing}|${ms.vol}|${ms.volMax}"
+                        if (key != lastMediaKey) {
+                            lastMediaKey = key
+                            lastMediaAt  = System.currentTimeMillis()
+                            AppLog.i("MEDIA", "send: ${ms.title}/${ms.artist}/${ms.playing}/${ms.vol}/${ms.volMax}")
+                            runCatching {
+                                val r = ble.request("media_state", mapOf(
+                                    "title"   to ms.title.take(60),
+                                    "artist"  to ms.artist.take(60),
+                                    "playing" to ms.playing,
+                                    "vol"     to ms.vol,
+                                    "vol_max" to ms.volMax,
+                                ), timeoutMs = 2_000)
+                                AppLog.i("MEDIA", "sent ok=${r?.optBoolean("ok")}")
+                            }
+                        } else {
+                            lastMediaAt = System.currentTimeMillis()
+                        }
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 AppLog.e("HUB", "loop error", e)
             }
-            delay(if (ble.conn.value == WatchBle.Conn.Ready) 30_000 else 45_000)
+            delay(if (ble.conn.value == WatchBle.Conn.Ready) 3_000 else 30_000)
         }
     }
+
 
     suspend fun connectNow(scanNew: Boolean = false): Boolean {
         if (scanNew) updateSettings { it.copy(address = null) }
@@ -156,8 +185,9 @@ object WatchHub {
     }
 
     fun forget() {
-        ble.disconnect()
-        updateSettings { it.copy(address = null) }
+        ble.forgetDevice()
+        updateSettings { it.copy(address = null, lastStepsDate = "") }
+        _state.update { it.copy(conn = WatchBle.Conn.Disconnected) }
     }
 
     // ---------- sync ----------
@@ -169,21 +199,14 @@ object WatchHub {
         _state.update { it.copy(syncing = true, lastError = null) }
         try {
             hcWritable = runCatching { hc.status() == HcStatus.Ready }.getOrDefault(false)
-            when (name) {
-                "media_next"      -> { media.next();      return JSONObject().put("ok", true) }
-                "media_prev"      -> { media.previous();  return JSONObject().put("ok", true) }
-                "media_play_pause"-> { media.playPause(); return JSONObject().put("ok", true) }
-                "media_vol_up"    -> { media.volUp();     return JSONObject().put("ok", true) }
-                "media_vol_down"  -> { media.volDown();   return JSONObject().put("ok", true) }
-            }
 
             ble.request("ping")?.takeIf { it.optBoolean("ok") }?.let { p ->
-                _state.update { 
+                _state.update {
                     it.copy(
-                        fw = p.optString("fw"), 
+                        fw = p.optString("fw"),
                         battery = p.optInt("batt", -1).takeIf { b -> b >= 0 },
                         powerSave = p.optBoolean("ps", it.powerSave)
-                        ) 
+                    )
                 }
             }
             val zone = ZoneId.systemDefault()
@@ -192,26 +215,29 @@ object WatchHub {
                 "tz" to zone.rules.getOffset(java.time.Instant.now()).totalSeconds,
             ))
 
-            // 30 дней истории (в карточке показываем 7, в отдельном экране — все).
             ble.request("steps", mapOf("days" to 7))?.takeIf { it.optBoolean("ok") }?.let { r ->
                 val days = r.daysList().sortedBy { it.ymd }
                 val today = LocalDate.now().toString()
-                val watchToday = days.firstOrNull { it.ymd == today }?.steps ?: 0
 
-                // Свежее значение из Health Connect (все источники, дедупликация уже сделана HC).
-                // Если фоновое чтение недоступно — берём то, что уже в стейте.
+                val s = settings.value
+                val carriedWatch = if (s.lastStepsDate == today) s.lastWatchSteps else 0
+                val carriedHc    = if (s.lastStepsDate == today) s.lastHcSteps    else 0L
+
+                val watchToday = days.firstOrNull { it.ymd == today }?.steps ?: 0
+                val effectiveWatch = maxOf(carriedWatch, watchToday)
+
                 val hcTodayFresh = if (hcWritable)
                     runCatching { hc.readTodaySteps() }.getOrDefault(-1L)
                 else -1L
-                val hcToday = if (hcTodayFresh >= 0) hcTodayFresh else _state.value.hcSteps
+                val hcToday = maxOf(carriedHc, hcTodayFresh.coerceAtLeast(0L))
 
-                // Телефон — источник истины; часы только добавляют, если телефон молчит.
-                val totalToday = maxOf(hcToday, watchToday.toLong())
+                val totalToday = maxOf(hcToday, effectiveWatch.toLong())
+
                 if (hcToday > watchToday) {
                     AppLog.i("HUB", "push steps to watch: watch=$watchToday phone=$hcToday")
                     runCatching {
-                        ble.request("steps_set", mapOf("steps" to hcToday))?.let { r ->
-                            if (r.optBoolean("ok")) {
+                        ble.request("steps_set", mapOf("steps" to hcToday))?.let { rr ->
+                            if (rr.optBoolean("ok")) {
                                 _state.update { st -> st.copy(watchSteps = hcToday.toInt()) }
                             }
                         }
@@ -219,38 +245,43 @@ object WatchHub {
                 }
 
                 _state.update { st ->
-                    val newDay = st.stepsDate != today
+                    val newDay = st.stepsDate != today && st.stepsDate < today
                     val prevWatch = if (newDay) 0 else (st.watchSteps ?: 0)
-                    val prevHc = if (newDay) 0L else st.hcSteps
-
-                    // Если часовой `days` пуст или не содержит сегодня — вставим сегодняшний
-                    // вручную, чтобы WeekChart не показывал «нет данных».
+                    val prevHc    = if (newDay) 0L else st.hcSteps
                     val week = if (days.isEmpty() || days.none { it.ymd == today }) {
-                        (days + DayStepsItem(today, maxOf(watchToday, totalToday.toInt())))
+                        (days + DayStepsItem(today, totalToday.toInt()))
                             .sortedBy { it.ymd }
                             .takeLast(7)
                     } else days
-
                     st.copy(
                         week = week,
                         stepsDate = today,
-                        watchSteps = if (newDay) watchToday else maxOf(prevWatch, watchToday),
-                        hcSteps = if (newDay) totalToday else maxOf(prevHc, totalToday),
+                        watchSteps = maxOf(prevWatch, effectiveWatch),
+                        hcSteps    = maxOf(prevHc,   totalToday),
+                    )
+                }
+
+                val finalState = _state.value
+                updateSettings {
+                    it.copy(
+                        lastStepsDate  = today,
+                        lastWatchSteps = finalState.watchSteps ?: 0,
+                        lastHcSteps    = finalState.hcSteps,
                     )
                 }
 
                 if (hcWritable) {
-                    // Сегодня пишем МАКСИМУМ, чтобы 0 с зависших часов не обнулил данные телефона.
                     if (totalToday > 0) {
                         runCatching { hc.writeDailySteps(today, totalToday) }
                             .onFailure { AppLog.e("HC", "write steps $today", it) }
                     }
-                    // Прошлые дни — только если там реально что-то есть.
                     days.filter { it.ymd != today && it.steps > 0 }.forEach { d ->
                         runCatching { hc.writeDailySteps(d.ymd, d.steps.toLong()) }
                             .onFailure { AppLog.e("HC", "write steps ${d.ymd}", it) }
                     }
-                } else AppLog.w("HC", "no Health Connect write permission, skipping steps write")
+                } else {
+                    AppLog.w("HC", "no write permission, skipping steps write")
+                }
             }
 
             importTrainings()
@@ -271,7 +302,6 @@ object WatchHub {
             _state.update { it.copy(syncing = false) }
         }
     }
-
     private suspend fun importTrainings() {
         val r = ble.request("training_list")?.takeIf { it.optBoolean("ok") } ?: return
         val all = r.trainingList().sortedByDescending { it.start }
@@ -329,16 +359,24 @@ object WatchHub {
             "step" -> {
                 val today = LocalDate.now().toString()
                 val total = ev.optInt("total")
+                val s = settings.value
+                val carried = if (s.lastStepsDate == today) s.lastHcSteps else 0L
                 _state.update { st ->
-                    val newDay = st.stepsDate != today
-                    val prev = if (newDay) 0 else (st.watchSteps ?: 0)
-                    val w = if (newDay) total else maxOf(prev, total)
-                    val h = if (newDay) w.toLong() else maxOf(st.hcSteps, w.toLong())
+                    val newDay = st.stepsDate != today && st.stepsDate < today
+                    val prevW = if (newDay) 0 else (st.watchSteps ?: 0)
+                    val w = maxOf(prevW, total)
+                    val h = maxOf(carried, if (newDay) w.toLong() else maxOf(st.hcSteps, w.toLong()))
                     st.copy(stepsDate = today, watchSteps = w, hcSteps = h)
                 }
+                val wNow = _state.value.watchSteps ?: 0
+                val hNow = _state.value.hcSteps
+                updateSettings { it.copy(
+                    lastStepsDate = today,
+                    lastWatchSteps = wNow,
+                    lastHcSteps = hNow,
+                ) }
                 if (hcWritable) scope.launch {
-                    val toWrite = _state.value.hcSteps
-                    if (toWrite > 0) runCatching { hc.writeDailySteps(today, toWrite) }
+                    if (hNow > 0) runCatching { hc.writeDailySteps(today, hNow) }
                 }
             }
             "batt" -> {
@@ -349,6 +387,11 @@ object WatchHub {
             "training_start" -> AppLog.i("HUB", "training started: ${ev.optString("type")}")
             "training_end" -> scope.launch { syncMutex.withLock { importTrainings() } }
             "alarm" -> AppLog.i("HUB", "alarm fired idx=${ev.optInt("idx")}")
+            "media_next"        -> media.next()
+            "media_prev"        -> media.prev()
+            "media_play_pause"  -> media.togglePlayPause()
+            "media_vol_up"      -> media.volumeUp()
+            "media_vol_down"    -> media.volumeDown()
         }
     }
 
@@ -356,22 +399,32 @@ object WatchHub {
 
     private var lastKey = ""
     private var lastKeyAt = 0L
+    private var lastMediaKey = ""
 
     fun mirror(pkg: String, appName: String, title: String, body: String) {
         val s = settings.value
-        if (!s.mirrorEnabled || pkg !in s.allowedPkgs) return
+        if (!s.mirrorEnabled) {
+            AppLog.i("MIRROR", "disabled, drop $pkg"); return
+        }
+        if (pkg !in s.allowedPkgs) {
+            AppLog.i("MIRROR", "$pkg not in allowedPkgs (${s.allowedPkgs.size})"); return
+        }
         val key = "$pkg|$title|$body"
         val now = System.currentTimeMillis()
         if (key == lastKey && now - lastKeyAt < 3000) return
         lastKey = key; lastKeyAt = now
         scope.launch {
             if (ble.conn.value != WatchBle.Conn.Ready) {
-                AppLog.w("MIRROR", "watch not connected, dropped notification from $pkg"); return@launch
+                AppLog.w("MIRROR", "watch offline, drop $pkg"); return@launch
             }
-            ble.request("notify", mapOf(
-                "app" to appName, "title" to title.take(40), "body" to body.take(160),
-                "pkg" to pkg, "ico" to Proto.iconKey(pkg),
+            val r = ble.request("notify", mapOf(
+                "app"   to appName,
+                "title" to title.take(40),
+                "body"  to body.take(160),
+                "pkg"   to pkg,
+                "ico"   to Proto.iconKey(pkg),
             ))
+            AppLog.i("MIRROR", "sent $pkg ok=${r?.optBoolean("ok")}")
         }
     }
 }

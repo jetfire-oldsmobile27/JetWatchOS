@@ -19,21 +19,48 @@ static NimBLECharacteristic* s_rx   {nullptr};
 struct BleLine { char s[256]; };
 static QueueHandle_t s_q  {nullptr};
 
+struct TxItem { char s[256]; };
+static QueueHandle_t s_tx_q = nullptr;
+static TaskHandle_t  s_tx_task = nullptr;
+
+static void ble_tx_task(void*) {
+    TxItem it;
+    while (true) {
+        if (xQueueReceive(s_tx_q, &it, portMAX_DELAY) != pdPASS) continue;
+        if (!s_tx) continue;
+
+        size_t len = strlen(it.s);
+        const size_t chunk = 240;
+        size_t off = 0;
+        while (off < len) {
+            size_t n = std::min(chunk, len - off);
+            s_tx->setValue(reinterpret_cast<const uint8_t*>(it.s + off), n);
+            // 3 попытки × 8 мс — если стек занят, дропаем, телефон переспросит
+            bool ok = false;
+            for (int i = 0; i < 3; ++i) {
+                if (s_tx->notify()) { ok = true; break; }
+                vTaskDelay(pdMS_TO_TICKS(8));
+            }
+            if (!ok) {
+                Serial.printf("[BLE] notify drop off=%u\n", (unsigned)off);
+                break;
+            }
+            off += n;
+        }
+    }
+}
+
 void ble_set_active(bool on) { /* no-op, активность ведётся через PowerManager */ }
 
 class SrvCB : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* s, NimBLEConnInfo& info) override {
-        Serial.printf("[BLE] connected addr=%s\n", info.getAddress().toString().c_str());
-        s->updateConnParams(info.getConnHandle(),
-                            /*min*/     12,
-                            /*max*/     24,
-                            /*latency*/ 0,
-                            /*timeout*/ 400);
+        Serial.printf("[BLE] connected addr=%s\n",
+                      info.getAddress().toString().c_str());
+        s->updateConnParams(info.getConnHandle(), 24, 40, 0, 500);
     }
-
     void onDisconnect(NimBLEServer* s, NimBLEConnInfo& info, int reason) override {
-        Serial.printf("[BLE] disconnected reason=%d, restart adv\n", reason);
-        // Без этой строки часы пропадают из эфира до перезагрузки
+        Serial.printf("[BLE] disconnected reason=%d\n", reason);
+        vTaskDelay(pdMS_TO_TICKS(300));
         NimBLEDevice::startAdvertising();
     }
 };
@@ -73,13 +100,12 @@ void BleService::begin(const char* name)
     s_tx = svc->createCharacteristic(proto::TX_UUID,
               NIMBLE_PROPERTY::NOTIFY);
     s_rx->setCallbacks(&s_rx_cb);
-    // svc->start() удалено — в NimBLE 2.x сервисы стартуют вместе с сервером
 
     auto* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(proto::SERVICE_UUID);
-    adv->enableScanResponse(true);          // было setScanResponse(true)
-    adv->setMinInterval(160);   //  100 ms
-    adv->setMaxInterval(320);   //  200 ms
+    adv->enableScanResponse(true);
+    adv->setMinInterval(160);
+    adv->setMaxInterval(320);
     NimBLEDevice::startAdvertising();
 
     _active = true;
@@ -106,15 +132,16 @@ void BleService::_sendJson(JsonDocument& doc) {
     while (off < out.length()) {
         size_t n = min(chunk, out.length() - off);
         s_tx->setValue(reinterpret_cast<const uint8_t*>(out.c_str() + off), n);
-
-        int tries = 0;
-        while (!s_tx->notify() && ++tries < 20) delay(15);
-        if (tries >= 20) {
-            Serial.printf("[BLE] notify give up at off=%u\n", (unsigned)off);
+        bool sent = false;
+        for (int i = 0; i < 3; ++i) {
+            if (s_tx->notify()) { sent = true; break; }
+            vTaskDelay(pdMS_TO_TICKS(8));
+        }
+        if (!sent) {
+            Serial.printf("[BLE] notify drop off=%u\n", (unsigned)off);
             return;
         }
         off += n;
-        delay(5);
     }
 }
 
@@ -164,12 +191,20 @@ void BleService::_handleLine(const char* s)
 {
     JsonDocument d;
     if (deserializeJson(d, s) != DeserializationError::Ok) {
+        Serial.printf("[BLE] bad json (%u): '%s'\n", (unsigned)strlen(s), s);
         JsonDocument r; r["ok"]=false; r["err"]="json"; sendJson(r);
         return;
     }
 
     int id = d["id"] | 0;
     const char* cmd = d["cmd"] | "";
+
+    // Android BLE стек иногда шлёт пустые keepalive-пакеты
+    if (!cmd[0] && id <= 0) {
+        Serial.printf("[BLE] empty pkt (%u): '%s'\n", (unsigned)strlen(s), s);
+        return;
+    }
+
     Serial.printf("[BLE] rx cmd='%s' id=%d screen_off=%d\n",
               cmd, id, (int)PowerManager::inst().isScreenOff());
     auto& db = Database::inst();
@@ -268,9 +303,22 @@ void BleService::_handleLine(const char* s)
         reply(r, id, true);
     }
     else if (!strcmp(cmd, "notify")) {
-        extern void app_notifications_push(const char*, const char*, const char*);
-        app_notifications_push(d["app"] | "App", d["title"] | "", d["body"] | "");
-        // @todo: сохранять pkg/ico для будущего UI иконок
+        extern void app_notifications_push(const char*, const char*,
+                                           const char*, const char*);
+        app_notifications_push(d["app"]   | "App",
+                                d["title"] | "",
+                                d["body"]  | "",
+                                d["ico"]   | "");
+        JsonDocument r; reply(r, id, true);
+    }
+    else if (!strcmp(cmd, "media_state")) {
+        extern void app_music_set_state(const char*, const char*,
+                                         bool, int, int);
+        app_music_set_state(d["title"]   | "",
+                            d["artist"]  | "",
+                            d["playing"] | false,
+                            d["vol"]     | 0,
+                            d["vol_max"] | 0);
         JsonDocument r; reply(r, id, true);
     }
     else if (!strcmp(cmd, "steps")) {

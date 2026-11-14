@@ -15,5 +15,12 @@ std::unique_ptr<App> app_training_make();
 std::unique_ptr<App> app_terminal_make();
 std::unique_ptr<App> app_settings_make();
 std::unique_ptr<App> app_notifications_make();
+std::unique_ptr<App> app_ir_make();
 
-void app_notifications_push(const char* app, const char* title, const char* body);
+void app_notifications_push(const char* app, const char* title,
+                            const char* body, const char* icon_key);
+void app_notifications_poll();
+
+// Music: обновление состояния с телефона.
+void app_music_set_state(const char* title, const char* artist,
+                          bool playing, int vol, int vol_max);

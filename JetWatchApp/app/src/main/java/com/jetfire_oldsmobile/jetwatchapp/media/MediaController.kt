@@ -1,55 +1,71 @@
 package com.jetfire_oldsmobile.jetwatchapp.media
 
+import android.content.ComponentName
 import android.content.Context
 import android.media.AudioManager
-import android.view.KeyEvent
+import android.media.MediaMetadata
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import com.jetfire_oldsmobile.jetwatchapp.log.AppLog
+import com.jetfire_oldsmobile.jetwatchapp.service.WatchNotificationListener
+
+data class MediaState(
+    val title: String = "",
+    val artist: String = "",
+    val playing: Boolean = false,
+    val vol: Int = 0,
+    val volMax: Int = 0,
+)
 
 class MediaController(private val ctx: Context) {
 
-    private val audio = ctx.getSystemService(AudioManager::class.java)
-    private val sessionMgr = ctx.getSystemService(MediaSessionManager::class.java)
+    private val sessions =
+        ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
 
-    /** Отправить медиа-клавишу в активную сессию. */
-    fun sendKey(keyCode: Int) {
-        // 1) Пробуем через активную сессию (даёт play/pause, next, prev)
-        val session = activeSession()
-        if (session != null && keyCode in setOf(
-                KeyEvent.KEYCODE_MEDIA_NEXT,
-                KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
-            )) {
-            session.controller.transportControls.let { tc ->
-                when (keyCode) {
-                    KeyEvent.KEYCODE_MEDIA_NEXT -> tc.skipToNext()
-                    KeyEvent.KEYCODE_MEDIA_PREVIOUS -> tc.skipToPrevious()
-                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                        val state = session.controller.playbackState?.state
-                        if (state == PlaybackState.STATE_PLAYING) tc.pause()
-                        else tc.play()
-                    }
-                }
-            }
-            AppLog.i("MEDIA", "session cmd key=$keyCode")
-            return
-        }
+    private val own = ComponentName(ctx, WatchNotificationListener::class.java)
 
-        // 2) Fallback: глобальный диспетчер (громкость, а также next/prev,
-        //    если сессия не отдаёт transport controls)
-        val down = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
-        val up = KeyEvent(KeyEvent.ACTION_UP, keyCode)
-        audio.dispatchMediaKeyEvent(down)
-        audio.dispatchMediaKeyEvent(up)
-        AppLog.i("MEDIA", "dispatch key=$keyCode")
+    private fun current(): android.media.session.MediaController? = try {
+        sessions.getActiveSessions(own).firstOrNull()
+    } catch (e: SecurityException) {
+        AppLog.w("MEDIA", "no notification-listener access")
+        null
+    } catch (e: Exception) {
+        AppLog.e("MEDIA", "getActiveSessions failed", e)
+        null
     }
 
-    private fun activeSession(): MediaSessionManager.RemoteUserInfo? {
-        val user = android.os.Process.myUserHandle()
-        return runCatching { sessionMgr.getActiveSessions(null).firstOrNull() }
-            .getOrNull()
-            ?.let { /* RemoteUserInfo не нужен, нужен контроллер */ }
-            ?.let { null } // заглушка: ниже используем другой путь
+    fun play()  { current()?.transportControls?.play() }
+    fun pause() { current()?.transportControls?.pause() }
+    fun next()  { current()?.transportControls?.skipToNext() }
+    fun prev()  { current()?.transportControls?.skipToPrevious() }
+
+    fun togglePlayPause() {
+        val c = current() ?: return
+        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause()
+        else                                                       c.transportControls.play()
+    }
+
+    fun volumeUp() {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
+    }
+
+    fun volumeDown() {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
+    }
+
+    fun snapshot(): MediaState {
+        val c = current()
+        val md = c?.metadata
+        val state = c?.playbackState?.state
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        return MediaState(
+            title   = md?.getString(MediaMetadata.METADATA_KEY_TITLE)  ?: "",
+            artist  = md?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: "",
+            playing = state == PlaybackState.STATE_PLAYING,
+            vol     = am.getStreamVolume(AudioManager.STREAM_MUSIC),
+            volMax  = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC),
+        )
     }
 }
