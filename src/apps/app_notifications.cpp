@@ -102,7 +102,7 @@ static lv_obj_t* _icon_circle(lv_obj_t* parent, int size,
 
     lv_obj_t* l = lv_label_create(c);
     lv_label_set_text(l, letter);
-    lv_obj_set_style_text_font(l, size >= 60 ? &font_alibaba_40 : &font_alibaba_24, 0);
+    lv_obj_set_style_text_font(l, size >= 60 ? &font_mont_40 : &font_mont_24, 0);
     lv_obj_set_style_text_color(l, lv_color_white(), 0);
     lv_obj_center(l);
     return c;
@@ -129,7 +129,7 @@ static void _show_banner(const Notification& n) {
     lv_obj_t* ic = _icon_circle(s_popup, 44, n.app, n.icon);
     lv_obj_align(ic, LV_ALIGN_LEFT_MID, 0, 0);
 
-    lv_obj_t* txt = ui_make_label(s_popup, &font_alibaba_12, lv_color_white(), "");
+    lv_obj_t* txt = ui_make_label(s_popup, &font_mont_12, lv_color_white(), "");
     lv_label_set_text_fmt(txt, "%s: %s\n%s", n.app, n.title, n.body);
     lv_obj_set_width(txt, LV_PCT(72));
     lv_label_set_long_mode(txt, LV_LABEL_LONG_WRAP);
@@ -161,18 +161,18 @@ static void _show_fullscreen(const Notification& n) {
     lv_obj_t* ic = _icon_circle(s_popup, 60, n.app, n.icon);
     lv_obj_align(ic, LV_ALIGN_TOP_MID, 0, 12);
 
-    lv_obj_t* app_lbl = ui_make_label(s_popup, &font_alibaba_12,
+    lv_obj_t* app_lbl = ui_make_label(s_popup, &font_mont_12,
                                        lv_color_hex(0xAAAAAA), n.app);
     lv_obj_align(app_lbl, LV_ALIGN_TOP_MID, 0, 78);
 
-    lv_obj_t* title_lbl = ui_make_label(s_popup, &font_alibaba_24,
+    lv_obj_t* title_lbl = ui_make_label(s_popup, &font_mont_24,
                                          lv_color_white(), n.title);
     lv_obj_set_width(title_lbl, LV_PCT(92));
     lv_label_set_long_mode(title_lbl, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(title_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(title_lbl, LV_ALIGN_TOP_MID, 0, 96);
 
-    lv_obj_t* body_lbl = ui_make_label(s_popup, &font_alibaba_12,
+    lv_obj_t* body_lbl = ui_make_label(s_popup, &font_mont_12,
                                         lv_color_hex(0xCCCCCC), n.body);
     lv_obj_set_width(body_lbl, LV_PCT(92));
     lv_obj_set_height(body_lbl, 44);
@@ -255,7 +255,7 @@ public:
         lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
 
         if (s_list.empty()) {
-            ui_make_label(list, &font_alibaba_24, lv_color_hex(0x888888),
+            ui_make_label(list, &font_mont_24, lv_color_hex(0x888888),
                           "No notifications");
             return;
         }
@@ -271,7 +271,7 @@ public:
             lv_obj_t* ic = _icon_circle(card, 48, n.app, n.icon);
             lv_obj_align(ic, LV_ALIGN_LEFT_MID, 0, 0);
 
-            lv_obj_t* l = ui_make_label(card, &font_alibaba_12,
+            lv_obj_t* l = ui_make_label(card, &font_mont_12,
                                          lv_color_white(), "");
             lv_label_set_text_fmt(l, "%s: %s\n%s", n.app, n.title, n.body);
             lv_obj_set_width(l, LV_PCT(74));

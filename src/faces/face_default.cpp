@@ -92,20 +92,20 @@ void face_default_build(lv_obj_t* parent)
     ui_make_statusbar(parent);
 
     // ---------- Время слева столбиком ----------
-    l_h = ui_make_label(parent, &font_alibaba_40, lv_color_white(), "00");
+    l_h = ui_make_label(parent, &font_mont_40, lv_color_white(), "00");
     lv_obj_set_pos(l_h, 14, 38);
 
-    l_m = ui_make_label(parent, &font_alibaba_40, lv_color_white(), "00");
+    l_m = ui_make_label(parent, &font_mont_40, lv_color_white(), "00");
     lv_obj_set_pos(l_m, 14, 94);
 
-    l_s = ui_make_label(parent, &font_alibaba_40, lv_color_hex(0xFF7A1A), "00");
+    l_s = ui_make_label(parent, &font_mont_40, lv_color_hex(0xFF7A1A), "00");
     lv_obj_set_pos(l_s, 14, 150);
 
-    l_date = ui_make_label(parent, &font_alibaba_12, lv_color_hex(0x888888), "--");
+    l_date = ui_make_label(parent, &font_mont_12, lv_color_hex(0x888888), "--");
     lv_obj_set_pos(l_date, 16, 206);
 
 #if defined(USING_BMA423_SENSOR)
-    l_temp = ui_make_label(parent, &font_alibaba_12, lv_color_hex(0x666666), "--");
+    l_temp = ui_make_label(parent, &font_mont_12, lv_color_hex(0x666666), "--");
     lv_obj_set_pos(l_temp, 16, 222);
 
     lv_obj_t* l_temp_u = ui_make_label(parent, &lv_font_montserrat_12,

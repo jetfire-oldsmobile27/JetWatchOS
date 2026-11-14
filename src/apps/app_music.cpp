@@ -5,6 +5,113 @@
 #include "hal/hw.h"
 #include "core/BleService.h"
 
+// ============================================================================
+//  Marquee (бегущая строка)
+// ============================================================================
+// Скорость прокрутки, пикселей в секунду. Можно переопределить через
+// platformio.ini:  build_flags = -DMARQUEE_SPEED_PX_PER_SEC=30
+#ifndef MARQUEE_SPEED_PX_PER_SEC
+#define MARQUEE_SPEED_PX_PER_SEC   40
+#endif
+
+// Пауза перед началом прокрутки (мс)
+#ifndef MARQUEE_HOLD_MS
+#define MARQUEE_HOLD_MS            1000
+#endif
+
+static void _marquee_exec(void* var, int32_t v) {
+    lv_obj_set_style_translate_x((lv_obj_t*)var, v, 0);
+}
+
+// Создаёт «окно» фиксированного размера с клиппингом. Возвращает label —
+// через него менять текст через _marquee_set_text.
+static lv_obj_t* _marquee_create(lv_obj_t* parent,
+                                  lv_coord_t width, lv_coord_t height,
+                                  const lv_font_t* font, lv_color_t color)
+{
+    lv_obj_t* clip = lv_obj_create(parent);
+    lv_obj_remove_style_all(clip);
+    lv_obj_set_size(clip, width, height);
+    lv_obj_clear_flag(clip, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(clip, LV_OBJ_FLAG_CLICKABLE);
+    // LV_OBJ_FLAG_OVERFLOW_VISIBLE не выставляем → дети клиппятся по границам
+
+    lv_obj_t* lbl = lv_label_create(clip);
+    lv_obj_set_style_text_font(lbl, font, 0);
+    lv_obj_set_style_text_color(lbl, color, 0);
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+    return lbl;
+}
+
+// Установить текст. Если помещается — центрируется без анимации.
+// Если не помещается — текст дублируется и запускается бегущая строка.
+static void _marquee_set_text(lv_obj_t* lbl, const char* text)
+{
+    if (!lbl) return;
+    lv_anim_del(lbl, _marquee_exec);
+    lv_obj_set_style_translate_x(lbl, 0, 0);
+
+    const lv_font_t* font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+    lv_obj_t* clip = lv_obj_get_parent(lbl);
+    lv_coord_t clip_w = lv_obj_get_width(clip);
+
+    const char* t = text ? text : "";
+    if (!t[0]) {
+        lv_label_set_text(lbl, "");
+        lv_obj_set_width(lbl, clip_w);
+        lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+        return;
+    }
+
+    // Измеряем одиночный текст
+    lv_point_t sz;
+    lv_txt_get_size(&sz, t, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_coord_t txt_w = sz.x;
+
+    if (txt_w <= clip_w) {
+        // Помещается — центрируем
+        lv_obj_set_width(lbl, clip_w);
+        lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(lbl, t);
+        return;
+    }
+
+    // Не помещается — дублируем с разделителем из 5 пробелов
+    String doubled = String(t) + "     " + t;
+
+    lv_point_t sz2;
+    lv_txt_get_size(&sz2, doubled.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_coord_t full_w = sz2.x;
+    lv_coord_t gap_w  = full_w - 2 * txt_w;
+
+    lv_obj_set_width(lbl, full_w);
+    lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_text(lbl, doubled.c_str());
+
+    // Прокручиваем ровно на одну копию (txt_w + gap_w). В конце вторая копия
+    // оказывается там, где начиналась первая → сброс к 0 визуально бесшовный.
+    int32_t distance = -(int32_t)(txt_w + gap_w);
+    uint32_t dur_ms = (uint32_t)(-distance) * 1000UL / MARQUEE_SPEED_PX_PER_SEC;
+    if (dur_ms < 800) dur_ms = 800;
+
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, lbl);
+    lv_anim_set_exec_cb(&a, _marquee_exec);
+    lv_anim_set_values(&a, 0, distance);
+    lv_anim_set_time(&a, dur_ms);
+    lv_anim_set_delay(&a, MARQUEE_HOLD_MS);
+    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&a, lv_anim_path_linear);
+    lv_anim_start(&a);
+}
+
+// ============================================================================
+//  Music app
+// ============================================================================
 struct MusicState {
     char title[64]  = {0};
     char artist[64] = {0};
@@ -22,8 +129,8 @@ void app_music_set_state(const char* title, const char* artist,
     strlcpy(s_state.title,  title  ? title  : "", sizeof(s_state.title));
     strlcpy(s_state.artist, artist ? artist : "", sizeof(s_state.artist));
 
-    // Пока не истекло 3 с после оптимистичного тапа — не перетираем
-    // playing. Иначе телефон пришлёт стейл-снапшот и иконка отскочит.
+    // После оптимистичного тапа play/pause держим playing 3 с как есть,
+    // иначе телефон пришлёт стейл-снапшот и иконка отскочит.
     if (millis() - s_last_toggle_ms > 3000) {
         s_state.playing = playing;
     }
@@ -41,23 +148,15 @@ public:
         ui_make_screen(parent);
         ui_make_statusbar(parent);
 
-        // Title: y=34, font_alibaba_12 (в 2 раза меньше прежнего 24 px)
-        _title = ui_make_label(parent, &font_alibaba_12, lv_color_white(), "-");
-        lv_obj_set_width(_title, LV_PCT(94));
-        lv_label_set_long_mode(_title, LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_align(_title, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(_title, LV_ALIGN_TOP_MID, 0, 34);
+        // Title: y = 32, font_mont_16 (40% крупнее 12), ширина окна 216
+        _title = _marquee_create(parent, 216, 22, F_MUSIC, lv_color_white());
+        lv_obj_align(lv_obj_get_parent(_title), LV_ALIGN_TOP_MID, 0, 32);
 
-        // Artist: y=58 (было 50, +15%), font_alibaba_12 — тот же, что и title,
-        // но серый и строкой ниже. Перегенерённый с кириллицей.
-        _artist = ui_make_label(parent, &font_alibaba_12,
-                                lv_color_hex(0xAAAAAA), "");
-        lv_obj_set_width(_artist, LV_PCT(94));
-        lv_label_set_long_mode(_artist, LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_align(_artist, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(_artist, LV_ALIGN_TOP_MID, 0, 58);
+        // Artist: y = 56, font_mont_16, серый, тоже marquee
+        _artist = _marquee_create(parent, 216, 22, F_MUSIC, lv_color_hex(0xAAAAAA));
+        lv_obj_align(lv_obj_get_parent(_artist), LV_ALIGN_TOP_MID, 0, 56);
 
-        // Кнопки prev/play/next
+        // Кнопки prev / play-pause / next — y = 90..178
         lv_obj_t* cont = lv_obj_create(parent);
         lv_obj_set_size(cont, LV_PCT(100), 88);
         lv_obj_align(cont, LV_ALIGN_TOP_MID, 0, 90);
@@ -85,8 +184,7 @@ public:
 
         mk(vol, LV_SYMBOL_MINUS, MEDIA_VOLUME_DOWN, 44, 38, 8);
 
-        _vol_lbl = ui_make_label(vol, &font_alibaba_12,
-                                 lv_color_hex(0xCCCCCC), "Vol -");
+        _vol_lbl = ui_make_label(vol, F_TINY, lv_color_hex(0xCCCCCC), "Vol -");
         lv_obj_set_width(_vol_lbl, 96);
         lv_obj_set_style_text_align(_vol_lbl, LV_TEXT_ALIGN_CENTER, 0);
 
@@ -96,7 +194,11 @@ public:
         _refresh();
     }
 
-    void onExit() override { _title = _artist = _vol_lbl = _b_play = nullptr; }
+    void onExit() override {
+        if (_title)  lv_anim_del(_title,  _marquee_exec);
+        if (_artist) lv_anim_del(_artist, _marquee_exec);
+        _title = _artist = _vol_lbl = _b_play = nullptr;
+    }
     void onTick() override { _refresh(); }
 
 private:
@@ -105,23 +207,46 @@ private:
     lv_obj_t* _vol_lbl = nullptr;
     lv_obj_t* _b_play  = nullptr;
 
+    // Кэш последнего показанного текста — чтобы не перезапускать marquee
+    // при изменении только громкости.
+    char _cur_title[64]  = {0};
+    char _cur_artist[64] = {0};
+    int  _cur_vol_pct    = -1;
+    bool _cur_playing    = false;
+
     void _refresh() {
         if (!s_state.dirty) return;
         s_state.dirty = false;
 
-        if (_title)  lv_label_set_text(_title,  s_state.title[0]  ? s_state.title  : "-");
-        if (_artist) lv_label_set_text(_artist, s_state.artist[0] ? s_state.artist : "");
-        if (_vol_lbl) {
-            if (s_state.vol_max > 0) {
-                int pct = s_state.vol * 100 / s_state.vol_max;
-                lv_label_set_text_fmt(_vol_lbl, "%d%%", pct);
-            } else {
-                lv_label_set_text(_vol_lbl, "Vol -");
-            }
+        // ---- Title ----
+        const char* t = s_state.title[0] ? s_state.title : "-";
+        if (_title && strcmp(_cur_title, t) != 0) {
+            strlcpy(_cur_title, t, sizeof(_cur_title));
+            _marquee_set_text(_title, t);
         }
-        if (_b_play) {
+
+        // ---- Artist ----
+        const char* a = s_state.artist[0] ? s_state.artist : "";
+        if (_artist && strcmp(_cur_artist, a) != 0) {
+            strlcpy(_cur_artist, a, sizeof(_cur_artist));
+            _marquee_set_text(_artist, a);
+        }
+
+        // ---- Volume ----
+        int pct = (s_state.vol_max > 0)
+                    ? (s_state.vol * 100 / s_state.vol_max)
+                    : -1;
+        if (_vol_lbl && pct != _cur_vol_pct) {
+            _cur_vol_pct = pct;
+            if (pct >= 0) lv_label_set_text_fmt(_vol_lbl, "%d%%", pct);
+            else          lv_label_set_text(_vol_lbl, "Vol -");
+        }
+
+        // ---- Play/pause icon ----
+        if (_b_play && s_state.playing != _cur_playing) {
+            _cur_playing = s_state.playing;
             lv_obj_t* l = lv_obj_get_child(_b_play, 0);
-            if (l) lv_label_set_text(l, s_state.playing
+            if (l) lv_label_set_text(l, _cur_playing
                                         ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY);
         }
     }
@@ -136,9 +261,6 @@ private:
             auto k = (media_key_value_t)(intptr_t)lv_event_get_user_data(e);
             PowerManager::inst().resetActivity();
 
-            // Оптимистичное переключение play/pause — меняем сразу, не
-            // дожидаясь ответа телефона. s_last_toggle_ms блокирует
-            // перезапись playing на 3 с.
             if (k == MEDIA_PLAY_PAUSE) {
                 s_state.playing  = !s_state.playing;
                 s_state.dirty    = true;

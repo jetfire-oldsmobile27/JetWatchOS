@@ -302,7 +302,7 @@ private:
         lv_obj_set_style_border_width(row, 0, 0);
         lv_obj_set_style_pad_hor(row, 10, 0);
         lv_obj_set_style_pad_ver(row, 0, 0);
-        ui_make_label(row, &font_alibaba_12, lv_color_hex(0x666666), title);
+        ui_make_label(row, &font_mont_12, lv_color_hex(0x666666), title);
     }
 
     void _row_info(lv_obj_t* parent, const char* name, lv_obj_t** out) {
@@ -314,8 +314,8 @@ private:
         lv_obj_set_style_border_width(row, 0, 0);
         lv_obj_set_style_pad_hor(row, 10, 0);
         lv_obj_set_style_pad_ver(row, 0, 0);
-        ui_make_label(row, &font_alibaba_12, lv_color_hex(0xBBBBBB), name);
-        lv_obj_t* val = ui_make_label(row, &font_alibaba_12, lv_color_white(), "--");
+        ui_make_label(row, &font_mont_12, lv_color_hex(0xBBBBBB), name);
+        lv_obj_t* val = ui_make_label(row, &font_mont_12, lv_color_white(), "--");
         lv_obj_align(val, LV_ALIGN_RIGHT_MID, 0, 0);
         if (out) *out = val;
     }
@@ -330,7 +330,7 @@ private:
         lv_obj_set_style_bg_color(row, lv_color_hex(0x1F1F1F), 0);
         lv_obj_set_style_border_width(row, 0, 0);
         lv_obj_set_style_pad_hor(row, 10, 0);
-        ui_make_label(row, &font_alibaba_24, lv_color_white(), name);
+        ui_make_label(row, &font_mont_24, lv_color_white(), name);
 
         lv_obj_t* sw = lv_switch_create(row);
         lv_obj_align(sw, LV_ALIGN_RIGHT_MID, 0, 0);
@@ -362,20 +362,20 @@ private:
         lv_obj_set_user_data(row, (void*)(intptr_t)field);
         lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
 
-        lv_obj_t* name_lbl = ui_make_label(row, &font_alibaba_24,
+        lv_obj_t* name_lbl = ui_make_label(row, &font_mont_24,
                                            lv_color_white(), name);
         lv_obj_set_width(name_lbl, LV_PCT(40));
         lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_DOT);
         lv_obj_align(name_lbl, LV_ALIGN_LEFT_MID, 0, 0);
 
-        lv_obj_t* val_lbl = ui_make_label(row, &font_alibaba_24,
+        lv_obj_t* val_lbl = ui_make_label(row, &font_mont_24,
                                           lv_color_hex(0xAAAAAA), val);
         lv_obj_set_width(val_lbl, LV_PCT(48));
         lv_label_set_long_mode(val_lbl, LV_LABEL_LONG_DOT);
         lv_obj_align(val_lbl, LV_ALIGN_RIGHT_MID, -18, 0);
         lv_obj_set_style_text_align(val_lbl, LV_TEXT_ALIGN_RIGHT, 0);
 
-        ui_make_label(row, &font_alibaba_24, lv_color_hex(0x666666), ">");
+        ui_make_label(row, &font_mont_24, lv_color_hex(0x666666), ">");
 
         lv_obj_add_event_cb(row, [](lv_event_t* e){
             auto* s = static_cast<SettingsApp*>(lv_event_get_user_data(e));
@@ -420,9 +420,9 @@ private:
         lv_obj_set_style_border_width(row, 0, 0);
         lv_obj_set_style_pad_hor(row, 10, 0);
         lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
-        ui_make_label(row, &font_alibaba_24, lv_color_white(), name);
+        ui_make_label(row, &font_mont_24, lv_color_white(), name);
 
-        lv_obj_t* chev = ui_make_label(row, &font_alibaba_24,
+        lv_obj_t* chev = ui_make_label(row, &font_mont_24,
                                        lv_color_hex(0x666666), chevron);
         lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
 
@@ -449,13 +449,13 @@ private:
         lv_obj_set_style_pad_hor(row, 10, 0);
         lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
 
-        lv_obj_t* name_lbl = ui_make_label(row, &font_alibaba_24,
+        lv_obj_t* name_lbl = ui_make_label(row, &font_mont_24,
                                            lv_color_white(), name);
         lv_obj_set_width(name_lbl, LV_PCT(40));
         lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_DOT);
         lv_obj_align(name_lbl, LV_ALIGN_LEFT_MID, 0, 0);
 
-        lv_obj_t* val_lbl = ui_make_label(row, &font_alibaba_24,
+        lv_obj_t* val_lbl = ui_make_label(row, &font_mont_24,
                                           lv_color_hex(0xAAAAAA), "");
         lv_label_set_text_fmt(val_lbl, "%d", val);
         lv_obj_set_width(val_lbl, LV_PCT(48));
@@ -463,7 +463,7 @@ private:
         lv_obj_align(val_lbl, LV_ALIGN_RIGHT_MID, -18, 0);
         lv_obj_set_style_text_align(val_lbl, LV_TEXT_ALIGN_RIGHT, 0);
 
-        ui_make_label(row, &font_alibaba_24, lv_color_hex(0x666666), ">");
+        ui_make_label(row, &font_mont_24, lv_color_hex(0x666666), ">");
 
         struct Ctx {
             SettingsApp* app;
@@ -513,10 +513,10 @@ private:
         lv_obj_move_foreground(ov);
         _slider_ov = ov;
 
-        lv_obj_t* t = ui_make_label(ov, &font_alibaba_24, lv_color_white(), title);
+        lv_obj_t* t = ui_make_label(ov, &font_mont_24, lv_color_white(), title);
         lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 12);
 
-        lv_obj_t* v = ui_make_label(ov, &font_alibaba_60, lv_color_white(), "");
+        lv_obj_t* v = ui_make_label(ov, &font_mont_60, lv_color_white(), "");
         lv_label_set_text_fmt(v, "%d", _step_val);
         lv_obj_align(v, LV_ALIGN_CENTER, 0, -60);
         _step_val_lbl = v;
@@ -542,7 +542,7 @@ private:
 
             lv_obj_t* l = lv_label_create(b);
             lv_label_set_text(l, sym);
-            lv_obj_set_style_text_font(l, &font_alibaba_60, 0);
+            lv_obj_set_style_text_font(l, &font_mont_60, 0);
             lv_obj_set_style_text_color(l, lv_color_white(), 0);
             lv_obj_center(l);
         };
@@ -585,7 +585,7 @@ private:
         lv_obj_move_foreground(ov);
         _slider_ov = ov;
 
-        lv_obj_t* t = ui_make_label(ov, &font_alibaba_24,
+        lv_obj_t* t = ui_make_label(ov, &font_mont_24,
                                     lv_color_white(), "GPS Log");
         lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 6);
 
@@ -603,12 +603,12 @@ private:
             const char* msg = (hw_get_device_online() & HW_GPS_ONLINE)
                             ? "no events yet"
                             : "No GPS hardware";
-            ui_make_label(list, &font_alibaba_12, lv_color_hex(0x888888), msg);
+            ui_make_label(list, &font_mont_12, lv_color_hex(0x888888), msg);
         } else {
             for (int i = 0; i < gpslog::count(); ++i) {
                 const auto& e = gpslog::at(i);
                 uint32_t sec = e.ms / 1000;
-                lv_obj_t* l = ui_make_label(list, &font_alibaba_12,
+                lv_obj_t* l = ui_make_label(list, &font_mont_12,
                                             lv_color_hex(0xCCCCCC), "");
                 lv_label_set_text_fmt(l, "[%02u:%02u]  %s",
                                       (sec / 60) % 100, sec % 60, e.text);

@@ -47,7 +47,7 @@ private:
                                   LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
             lv_obj_set_style_pad_hor(row, 8, 0);
 
-            lv_obj_t* lbl = ui_make_label(row, &font_alibaba_24,
+            lv_obj_t* lbl = ui_make_label(row, &font_mont_24,
                                           lv_color_white(), "");
             lv_label_set_text_fmt(lbl, "%02d:%02d  %s",
                                   a.hour, a.minute, a.enabled ? "ON" : "off");

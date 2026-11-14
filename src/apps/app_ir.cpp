@@ -151,7 +151,7 @@ private:
     }
 
     lv_obj_t* _title(lv_obj_t* p, const char* txt) {
-        lv_obj_t* l = ui_make_label(p, &font_alibaba_24, lv_color_white(), txt);
+        lv_obj_t* l = ui_make_label(p, &font_mont_24, lv_color_white(), txt);
         lv_obj_set_width(l, LV_PCT(100));
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
         return l;
@@ -169,7 +169,7 @@ private:
 
         lv_obj_t* l = lv_label_create(b);
         lv_label_set_text(l, txt);
-        lv_obj_set_style_text_font(l, &font_alibaba_24, 0);
+        lv_obj_set_style_text_font(l, &font_mont_24, 0);
         lv_obj_set_style_text_color(l, lv_color_white(), 0);
         lv_obj_center(l);
         return b;
@@ -191,7 +191,7 @@ private:
 
         lv_obj_t* l = lv_label_create(b);
         lv_label_set_text(l, txt);
-        lv_obj_set_style_text_font(l, &font_alibaba_24, 0);
+        lv_obj_set_style_text_font(l, &font_mont_24, 0);
         lv_obj_set_style_text_color(l, lv_color_white(), 0);
         lv_obj_center(l);
         return b;
@@ -270,7 +270,7 @@ private:
 
             lv_obj_t* l = lv_label_create(b);
             lv_label_set_text(l, m.keys[i].label);
-            lv_obj_set_style_text_font(l, &font_alibaba_24, 0);
+            lv_obj_set_style_text_font(l, &font_mont_24, 0);
             lv_obj_set_style_text_color(l, lv_color_white(), 0);
             lv_obj_center(l);
         }
@@ -303,7 +303,7 @@ private:
         lv_obj_t* c = _scroll_area();
         _title(c, acModels[idx].name);
 
-        _lblTemp = ui_make_label(c, &font_alibaba_60, lv_color_white(), "");
+        _lblTemp = ui_make_label(c, &font_mont_60, lv_color_white(), "");
         lv_label_set_text_fmt(_lblTemp, "%d", _acTemp);
         lv_obj_set_width(_lblTemp, LV_PCT(100));
         lv_obj_set_style_text_align(_lblTemp, LV_TEXT_ALIGN_CENTER, 0);

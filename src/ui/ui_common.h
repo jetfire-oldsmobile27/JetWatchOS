@@ -25,10 +25,11 @@
   #define UI_IMG_SET_SRC(o,s)     lv_img_set_src(o,s)
 #endif
 
-LV_FONT_DECLARE(font_alibaba_12);
-LV_FONT_DECLARE(font_alibaba_24);
-LV_FONT_DECLARE(font_alibaba_40);
-LV_FONT_DECLARE(font_alibaba_60);
+LV_FONT_DECLARE(font_mont_12);
+LV_FONT_DECLARE(font_mont_16);
+LV_FONT_DECLARE(font_mont_24);
+LV_FONT_DECLARE(font_mont_40);
+LV_FONT_DECLARE(font_mont_60);
 LV_FONT_DECLARE(font_alibaba_100);
 
 LV_IMG_DECLARE(img_notify);

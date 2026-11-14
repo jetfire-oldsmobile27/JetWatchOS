@@ -28,21 +28,21 @@ public:
         ui_make_screen(parent);
         ui_make_statusbar(parent);
 
-        _city = ui_make_label(parent, &font_alibaba_24, lv_color_white(),
+        _city = ui_make_label(parent, &font_mont_24, lv_color_white(),
                               Database::inst().config().city);
         lv_obj_align(_city, LV_ALIGN_TOP_MID, 0, 40);
 
         // Число температуры и знак °C — два отдельных лейбла.
-        // В font_alibaba_60 нет глифа U+00B0, поэтому °C идёт
+        // В font_mont_60 нет глифа U+00B0, поэтому °C идёт
         // встроенным Montserrat'ом, а цифра — Alibaba.
-        _temp = ui_make_label(parent, &font_alibaba_60, lv_color_white(), "--");
+        _temp = ui_make_label(parent, &font_mont_60, lv_color_white(), "--");
         lv_obj_align(_temp, LV_ALIGN_CENTER, -18, -10);
 
         _deg = ui_make_label(parent, &lv_font_montserrat_24,
                              lv_color_white(), "°C");
         lv_obj_align_to(_deg, _temp, LV_ALIGN_OUT_RIGHT_TOP, 2, 8);
 
-        _info = ui_make_label(parent, &font_alibaba_24,
+        _info = ui_make_label(parent, &font_mont_24,
                               lv_color_hex(0xAAAAAA), "Loading...");
         lv_obj_align(_info, LV_ALIGN_CENTER, 0, 60);
 

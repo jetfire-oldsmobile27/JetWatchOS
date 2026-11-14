@@ -51,7 +51,7 @@ void charging_overlay_show()
     lv_obj_center(bolt);
 
     s_pct_lbl = lv_label_create(s_ov);
-    lv_obj_set_style_text_font(s_pct_lbl, &font_alibaba_24, 0);
+    lv_obj_set_style_text_font(s_pct_lbl, &font_mont_24, 0);
     lv_obj_set_style_text_color(s_pct_lbl, lv_color_white(), 0);
     lv_obj_align(s_pct_lbl, LV_ALIGN_CENTER, 0, 85);
 

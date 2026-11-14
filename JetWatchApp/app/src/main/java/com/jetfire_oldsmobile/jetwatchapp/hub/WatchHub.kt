@@ -286,9 +286,9 @@ object WatchHub {
 
             importTrainings()
 
-            ble.request("alarm_get", timeoutMs = 12_000)?.takeIf { it.optBoolean("ok") }?.let { r ->
-                _state.update { it.copy(alarms = r.alarmsList()) }
-            }
+//            ble.request("alarm_get", timeoutMs = 12_000)?.takeIf { it.optBoolean("ok") }?.let { r ->
+//                _state.update { it.copy(alarms = r.alarmsList()) }
+//            } // @todo timeout from watch!
             _state.update { it.copy(lastSync = System.currentTimeMillis()) }
             AppLog.i("HUB", "sync done")
         } catch (e: CancellationException) {

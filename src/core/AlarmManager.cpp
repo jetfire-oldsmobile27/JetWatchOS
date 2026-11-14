@@ -103,13 +103,13 @@ void AlarmManager::_fire(int idx)
     lv_obj_set_style_text_color(icon, lv_color_hex(0xFF7A1A), 0);
     lv_obj_align(icon, LV_ALIGN_CENTER, 0, -60);
 
-    lv_obj_t* tl = ui_make_label(s_alarm_ov, &font_alibaba_60,
+    lv_obj_t* tl = ui_make_label(s_alarm_ov, &font_mont_60,
                                  lv_color_white(), "--:--");
     auto& a = Database::inst().config().alarms[idx];
     lv_label_set_text_fmt(tl, "%02d:%02d", a.hour, a.minute);
     lv_obj_align(tl, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_t* sub = ui_make_label(s_alarm_ov, &font_alibaba_12,
+    lv_obj_t* sub = ui_make_label(s_alarm_ov, &font_mont_12,
                                   lv_color_hex(0xAAAAAA), "WAKE UP");
     lv_obj_align(sub, LV_ALIGN_CENTER, 0, 50);
 

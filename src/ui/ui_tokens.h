@@ -62,11 +62,13 @@ constexpr lv_coord_t LIST_PAD_BOTTOM = 16;
 //  f40  -> F_LARGE  (700 40)
 //  f60  -> F_HERO   (700 60)  цифры Steps / Stopwatch
 //  f100 -> F_GIANT  (700 100) часы 756_2
-#define F_TINY   &font_alibaba_12
-#define F_BODY   &lv_font_montserrat_14
-#define F_TITLE  &font_alibaba_24
-#define F_LARGE  &font_alibaba_40
-#define F_HERO   &font_alibaba_60
+
+#define F_TINY   &font_mont_12
+#define F_BODY   &font_mont_12
+#define F_MUSIC   &font_mont_16
+#define F_TITLE  &font_mont_24
+#define F_LARGE  &font_mont_40
+#define F_HERO   &font_mont_60
 #define F_GIANT  &font_alibaba_100
 
 } // namespace ui

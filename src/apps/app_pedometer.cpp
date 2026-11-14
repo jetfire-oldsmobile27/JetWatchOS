@@ -14,11 +14,11 @@ public:
         ui_make_screen(parent);
         ui_make_statusbar(parent);
 
-        auto total = ui_make_label(parent, &font_alibaba_60, lv_color_white(), "0");
+        auto total = ui_make_label(parent, &font_mont_60, lv_color_white(), "0");
         lv_obj_align(total, LV_ALIGN_CENTER, 0, -30);
         _steps = total;
 
-        auto goal = ui_make_label(parent, &font_alibaba_24,
+        auto goal = ui_make_label(parent, &font_mont_24,
                                   lv_color_hex(0xAAAAAA), "0 / 10000");
         lv_obj_align(goal, LV_ALIGN_CENTER, 0, 40);
         _goal = goal;

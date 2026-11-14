@@ -17,15 +17,15 @@ public:
         ui_make_screen(parent);
         ui_make_statusbar(parent);
 
-        _l_state = ui_make_label(parent, &font_alibaba_24,
+        _l_state = ui_make_label(parent, &font_mont_24,
                                  lv_color_white(), "Idle");
         lv_obj_align(_l_state, LV_ALIGN_TOP_MID, 0, 40);
 
-        _l_time = ui_make_label(parent, &font_alibaba_60,
+        _l_time = ui_make_label(parent, &font_mont_60,
                                 lv_color_white(), "00:00");
         lv_obj_align(_l_time, LV_ALIGN_CENTER, 0, -20);
 
-        _l_steps = ui_make_label(parent, &font_alibaba_24,
+        _l_steps = ui_make_label(parent, &font_mont_24,
                                  lv_color_hex(0xAAAAAA), "0 steps");
         lv_obj_align(_l_steps, LV_ALIGN_CENTER, 0, 40);
 
