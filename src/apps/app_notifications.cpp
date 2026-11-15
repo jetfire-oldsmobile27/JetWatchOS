@@ -180,8 +180,8 @@ static void _show_fullscreen(const Notification& n) {
     lv_obj_set_style_text_align(body_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(body_lbl, LV_ALIGN_TOP_MID, 0, 128);
 
-    lv_obj_t* dismiss = ui_make_btn_red(s_popup, "DISMISS",
-        [](lv_event_t*){ _close_popup_from_ui(); }, nullptr, 140, 36);
+    lv_obj_t* dismiss = ui_make_btn_red(s_popup, "-X-",
+        [](lv_event_t*){ _close_popup_from_ui(); }, nullptr, 100, 36);
     lv_obj_align(dismiss, LV_ALIGN_BOTTOM_MID, 0, -10);
 
     s_popup_timer = lv_timer_create([](lv_timer_t*){
@@ -205,9 +205,7 @@ static void _push_impl(const NotifPayload& p) {
 
     if (p.was_off) PowerManager::inst().wake();
     hw_feedback();
-    if (Database::inst().config().sounds_on) {
-        hw_set_sd_music_play(AUDIO_SOURCE_FATFS, "notify.mp3");
-    }
+    hw_play_notify_sound();
 
     if (p.was_off) _show_fullscreen(n);
     else           _show_banner(n);

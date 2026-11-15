@@ -49,53 +49,67 @@ static lv_obj_t* _marquee_create(lv_obj_t* parent,
 static void _marquee_set_text(lv_obj_t* lbl, const char* text)
 {
     if (!lbl) return;
+
     lv_anim_del(lbl, _marquee_exec);
     lv_obj_set_style_translate_x(lbl, 0, 0);
 
-    const lv_font_t* font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
-    lv_obj_t* clip = lv_obj_get_parent(lbl);
+    lv_obj_t* clip    = lv_obj_get_parent(lbl);
     lv_coord_t clip_w = lv_obj_get_width(clip);
+    lv_coord_t clip_h = lv_obj_get_height(clip);
 
+    const lv_font_t* font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
     const char* t = text ? text : "";
+
+    // 1. Принудительно инвалидируем ВСЮ площадь клипа.
+    //    Это лечит «призрак» второй копии при переходе scroll → fits.
+    lv_obj_invalidate(clip);
+
     if (!t[0]) {
         lv_label_set_text(lbl, "");
-        lv_obj_set_width(lbl, clip_w);
-        lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_set_size(lbl, clip_w, clip_h);
+        lv_obj_set_pos(lbl, 0, 0);
         return;
     }
 
-    // Измеряем одиночный текст
+    // 2. Меряем одиночную копию
     lv_point_t sz;
     lv_txt_get_size(&sz, t, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     lv_coord_t txt_w = sz.x;
+    lv_coord_t txt_h = sz.y;
 
     if (txt_w <= clip_w) {
-        // Помещается — центрируем
-        lv_obj_set_width(lbl, clip_w);
-        lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+        // ── Fits: одна копия, центрируем ──
+        lv_obj_set_size(lbl, clip_w, clip_h);
+        lv_obj_set_pos(lbl, 0, 0);              // ← абсолютная позиция, не align
         lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(lbl, t);
+        lv_obj_invalidate(clip);                // ещё раз, после смены размера
         return;
     }
 
-    // Не помещается — дублируем с разделителем из 5 пробелов
-    String doubled = String(t) + "     " + t;
+    // ── Scroll: две копии с широким разделителем ──
+    // 10 пробелов вместо 5 — гарантирует, что вторая копия какое-то время
+    // находится вне клипа даже для «средних» строк.
+    String doubled = String(t) + "          " + t;
 
     lv_point_t sz2;
     lv_txt_get_size(&sz2, doubled.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     lv_coord_t full_w = sz2.x;
-    lv_coord_t gap_w  = full_w - 2 * txt_w;
 
-    lv_obj_set_width(lbl, full_w);
-    lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
+    // 3. Явный размер + явная позиция. Не lv_obj_align — он вычислит
+    //    положение от старой (пустой) геометрии label и «уедет» вправо.
+    lv_obj_set_size(lbl, full_w, clip_h);
+    lv_obj_set_pos(lbl, 0, (clip_h - txt_h) / 2);   // вертикальный центр вручную
     lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
     lv_label_set_text(lbl, doubled.c_str());
+    lv_obj_invalidate(clip);
 
-    // Прокручиваем ровно на одну копию (txt_w + gap_w). В конце вторая копия
-    // оказывается там, где начиналась первая → сброс к 0 визуально бесшовный.
-    int32_t distance = -(int32_t)(txt_w + gap_w);
+    // 4. Смещение, при котором вторая копия встаёт ровно на позицию первой
+    lv_coord_t gap_w   = full_w - 2 * txt_w;        // реальная ширина «пробела»
+    int32_t    distance = -(int32_t)(txt_w + gap_w);
+
     uint32_t dur_ms = (uint32_t)(-distance) * 1000UL / MARQUEE_SPEED_PX_PER_SEC;
-    if (dur_ms < 800) dur_ms = 800;
+    if (dur_ms < 1000) dur_ms = 1000;
 
     lv_anim_t a;
     lv_anim_init(&a);

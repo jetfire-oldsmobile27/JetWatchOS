@@ -11,6 +11,7 @@
 #include <lvgl.h>
 #include "core/Database.h"  
 #include "audio/startup_audio.h"
+#include "audio/notify_16k.h"
 
 #ifndef USING_RADIO_NAME
 #define USING_RADIO_NAME "N/A"
@@ -394,6 +395,9 @@ static void playerTask(void *args)
         case APP_EVENT_PLAY_STARTUP:
             playWAV((uint8_t*)startup_16k_wav, startup_16k_wav_len);
             break;
+        case APP_EVENT_PLAY_NOTIFY:
+            playWAV((uint8_t*)notify_16k_wav, notify_16k_wav_len);
+            break;
         default:
             break;
         }
@@ -639,7 +643,7 @@ bool hw_audio_init()
         return true;   // уже инициализировано
     }
 
-    playerQueue = xQueueCreate(2, sizeof(audio_params_t));
+    playerQueue = xQueueCreate(4, sizeof(audio_params_t));
     playerEvent = xEventGroupCreate();
     if (!playerQueue || !playerEvent) {
         Serial.println("[PLAY] audio init failed: no heap for queue/event");
@@ -2439,5 +2443,27 @@ void hw_play_startup_sound()
     p.filename    = nullptr;
     p.source_type = AUDIO_SOURCE_FATFS;
     xQueueSend(playerQueue, &p, 0);   // 0 timeout — не блокируем setup()
+}
+
+void hw_play_notify_sound()
+{
+#ifdef ARDUINO
+    if (!playerQueue || !playerEvent) {
+        Serial.println("[PLAY] notify: pipeline not ready");
+        return;
+    }
+    if (!Database::inst().config().sounds_on) {
+        return;                                   // пользователь выключил
+    }
+    if (hw_player_running()) {
+        return;                                   // музыка играет — не перебиваем
+    }
+
+    audio_params_t p{};
+    p.event       = APP_EVENT_PLAY_NOTIFY;
+    p.filename    = nullptr;
+    p.source_type = AUDIO_SOURCE_FATFS;
+    xQueueSend(playerQueue, &p, 0);               // 0 timeout — не блокируем BLE-поток
+#endif
 }
 

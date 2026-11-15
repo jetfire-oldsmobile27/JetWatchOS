@@ -401,18 +401,22 @@ object WatchHub {
     private var lastKeyAt = 0L
     private var lastMediaKey = ""
 
+    private val recentMirrors = object : LinkedHashMap<String, Long>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?) = size > 32
+    }
+
     fun mirror(pkg: String, appName: String, title: String, body: String) {
         val s = settings.value
-        if (!s.mirrorEnabled) {
-            AppLog.i("MIRROR", "disabled, drop $pkg"); return
-        }
-        if (pkg !in s.allowedPkgs) {
-            AppLog.i("MIRROR", "$pkg not in allowedPkgs (${s.allowedPkgs.size})"); return
-        }
+        if (!s.mirrorEnabled) { AppLog.i("MIRROR", "disabled"); return }
+        if (pkg !in s.allowedPkgs) { AppLog.i("MIRROR", "$pkg not allowed"); return }
+
+        // Защита от совсем уж быстрого дубля одного и того же текста (несколько <10 мс).
         val key = "$pkg|$title|$body"
         val now = System.currentTimeMillis()
-        if (key == lastKey && now - lastKeyAt < 3000) return
-        lastKey = key; lastKeyAt = now
+        val prev = recentMirrors[key]
+        if (prev != null && now - prev < 2_000) return
+        recentMirrors[key] = now
+
         scope.launch {
             if (ble.conn.value != WatchBle.Conn.Ready) {
                 AppLog.w("MIRROR", "watch offline, drop $pkg"); return@launch

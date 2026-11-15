@@ -1527,6 +1527,10 @@ void hw_set_audio_effect_ab_class(bool enable);
 
 void hw_play_startup_sound();
 
+/** Проигрывает короткий notify-звук. Респектит cfg.sounds_on,
+ *  не перебивает музыку и стартовый звук. Можно звать из любого потока. */
+void hw_play_notify_sound();
+
 
 #if defined(ARDUINO_T_LORA_PAGER)
 #define USING_BLE_KEYBOARD

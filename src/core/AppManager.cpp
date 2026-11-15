@@ -54,6 +54,8 @@ void AppManager::launchApp(std::unique_ptr<App> app)
 
     _current = std::move(app);
 
+    if (_tileview) lv_obj_add_flag(_tileview, LV_OBJ_FLAG_HIDDEN); 
+    if (_group)    lv_group_focus_obj(lv_group_get_focused(_group));
     // Слой приложения — на активный ЭКРАН, поверх tileview.
     // Маска скругления висит на lv_layer_top(), значит останется сверху.
     _app_layer = lv_obj_create(lv_screen_active());
@@ -129,6 +131,7 @@ void AppManager::_closeCurrent()
     if (_tick_timer) { lv_timer_del(_tick_timer); _tick_timer = nullptr; }
     if (_current) { _current->onExit(); _current.reset(); }
     if (_app_layer) { UI_OBJ_DEL(_app_layer); _app_layer = nullptr; }
+    if (_tileview) lv_obj_clear_flag(_tileview, LV_OBJ_FLAG_HIDDEN);
 }
 void AppManager::_schedule(State s)
 {
