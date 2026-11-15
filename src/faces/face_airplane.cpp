@@ -7,10 +7,19 @@
 #include <string.h>
 
 // ---- Подгонка под реальную ориентацию BMA423 ----
-// Предполагается: +x вправо, +y к 12 часам, +z из экрана.
-#define AP_SIGN_PITCH  (1.0f)   // + = верхний край поднят
-#define AP_SIGN_ROLL   (1.0f)   // + = по часовой (правый край вниз)
-static inline void remap(float& x, float& y, float& z) { (void)x; (void)y; (void)z; }
+// Реально на плате: +x к 12 часам, +y вправо, +z из экрана.
+// После remap(): +x вправо, +y к 12 часам, +z из экрана.
+#define AP_SIGN_PITCH  (1.0f)   
+#define AP_SIGN_ROLL   (1.0f)  
+// BMA423 на этих часах: +x смотрит к 12 часам, +y вправо, +z из экрана.
+// Внутренняя система кода: +x вправо, +y к 12 часам, +z из экрана.
+// => меняем x и y местами.
+static inline void remap(float& x, float& y, float& z) {
+    float t = x;
+    x = y;
+    y = t;
+    (void)z;
+}
 
 namespace {
 
