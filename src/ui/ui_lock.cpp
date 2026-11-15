@@ -83,10 +83,17 @@ lv_obj_t* ui_build_lock(lv_obj_t* parent)
 {
     lv_obj_t* holder = ui_make_screen(parent, ui::bg());
 
-    FaceManager::inst().begin();
-    FaceManager::inst().mountCurrent(holder);
+    // Хост только для циферблата: sense остаётся его соседом сверху
+    lv_obj_t* host = lv_obj_create(holder);
+    lv_obj_remove_style_all(host);
+    lv_obj_set_size(host, LV_PCT(100), LV_PCT(100));
+    lv_obj_center(host);
+    lv_obj_clear_flag(host, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
 
-    lv_obj_t* sense = lv_obj_create(holder);
+    FaceManager::inst().begin();
+    FaceManager::inst().mountCurrent(host);
+
+    lv_obj_t* sense = lv_obj_create(holder); 
     lv_obj_remove_style_all(sense);
     lv_obj_set_size(sense, LV_PCT(100), LV_PCT(100));
     lv_obj_center(sense);

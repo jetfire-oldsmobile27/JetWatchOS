@@ -105,4 +105,27 @@ void crash_tick()
     g_ctx.lv_used_pct = m.used_pct;
     Serial.printf("[HB] up=%lus heap=%u min=%u lv=%u%% mark=%s\n",
                   now / 1000, g_ctx.free_heap, g_ctx.min_heap, m.used_pct, g_ctx.where);
+        static uint32_t last_fs_check = 0;
+    if (now - last_fs_check > 60000) {
+        last_fs_check = now;
+        size_t total = FFat.totalBytes();
+        size_t used  = FFat.usedBytes();
+        if (total == 0) {
+            Serial.println("[FS] FFat not mounted!");
+        } else if (used > total * 9 / 10) {
+            Serial.printf("[FS] WARN: FFat %u/%u bytes used (%.0f%%)\n",
+                          used, total, 100.0f * used / total);
+
+            // Полный листинг корня с размерами
+            File dir = FFat.open("/");
+            if (dir && dir.isDirectory()) {
+                File f = dir.openNextFile();
+                while (f) {
+                    Serial.printf("[FS]   /%-24s %8u B\n", f.name(), f.size());
+                    f = dir.openNextFile();
+                }
+                dir.close();
+            }
+        }
+    }
 }

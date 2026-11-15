@@ -45,6 +45,8 @@ LV_IMG_DECLARE(img_music);
 LV_IMG_DECLARE(img_gps);
 LV_IMG_DECLARE(img_monitoring);
 LV_IMG_DECLARE(img_test);
+LV_IMG_DECLARE(img_coffee);     // 96x96, A8
+LV_IMG_DECLARE(img_coffee_s);   // 18x18, A8
 
 // ---------------------------------------------------------------------
 //  ctx-хелпер: кладёт произвольную структуру в user_data, сама чистит
@@ -128,6 +130,9 @@ void      ui_banner(const char* app, const char* title, const char* body);
 
 void charging_overlay_show();
 
+void ui_caffeine_init();                
+void ui_statusbar_set_caffeine(bool on);
+
 // ---------------------------------------------------------------------
 //  Служебные
 // ---------------------------------------------------------------------
@@ -137,3 +142,6 @@ void ui_add_screen_corner_mask(uint8_t corner_radius = 24,
 void ui_enable_gesture_bubble(lv_obj_t* root);
 
 void ui_msg_pop_up(const char* title, const char* msg);
+
+void ui_load_indicator_init();
+void ui_load_tick();

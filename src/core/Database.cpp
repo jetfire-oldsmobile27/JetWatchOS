@@ -37,8 +37,22 @@ void Database::_applyDefaults()
 void Database::begin()
 {
     if (!FFat.begin(true)) {
-        Serial.println("[DB] FFat mount failed");
+        Serial.println("[DB] FFat mount failed, retrying with format");
+        if (!FFat.begin(true)) {
+            Serial.println("[DB] FFat mount failed twice — read-only mode, writes will fail");
+            // можно даже перезагрузить: esp_restart();
+        }
     }
+    
+    size_t total = FFat.totalBytes();
+    if (total == 0) {
+        Serial.println("[DB] FFat volume is 0 bytes — partition table mismatch or flash issue");
+        // Не сдаваться: пусть UI покажет ошибку, но не крашится
+    } else {
+        Serial.printf("[DB] FFat mounted: %u bytes total, %u used, %u free\n",
+                      total, FFat.usedBytes(), total - FFat.usedBytes());
+    }
+
     if (!_file_mux) _file_mux = xSemaphoreCreateMutex();
 
     _applyDefaults();

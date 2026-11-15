@@ -1,5 +1,6 @@
 #include "face_manager.hpp"
 #include "face_default.hpp"
+#include "face_airplane.hpp"
 #include "core/Database.h"
 #include "core/PowerManager.h"
 #include "hal/hw.h"
@@ -97,6 +98,18 @@ void FaceManager::begin()
         face_default_build(e.source);
         addEntry(e);
     }
+    // ---------- AirPlane ----------
+    {
+        Entry e;
+        strlcpy(e.name, "AirPlane", sizeof(e.name));
+        e.source = lv_obj_create(lv_screen_active());
+        lv_obj_set_size(e.source, 240, 240);
+        lv_obj_add_flag(e.source, LV_OBJ_FLAG_HIDDEN);
+        e.on_show = face_airplane_show;
+        e.on_hide = face_airplane_hide;
+        face_airplane_build(e.source);
+        addEntry(e);
+    }
 
     // ---------- 1..N: сгенерированные ----------
     //register_generated("756_2", init_face_756_2, update_check_756_2);
@@ -131,6 +144,7 @@ void FaceManager::_unmountActive()
 {
     if (_mounted < 0 || _mounted >= (int)_entries.size()) return;
     Entry& e = _entries[_mounted];
+    if (e.on_hide) e.on_hide();
     if (!e.source || !_container) return;
     move_children(_container, e.source);
     _mounted = -1;
@@ -152,6 +166,9 @@ void FaceManager::_mountIndex(int idx)
     }
     _mounted = idx;
     _current = idx;
+    if (e.on_show) {
+        e.on_show();
+    }
     tick();   // сразу обновим значения
 }
 

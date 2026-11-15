@@ -208,6 +208,7 @@ void setup() {
 
   // ---- Splash с этого момента ----
   ui_splash_begin();
+  ui_load_indicator_init();
   ui_splash_step("Display ready", 10);
 
   lv_display_t *d = lv_display_get_default();
@@ -233,6 +234,7 @@ void setup() {
   ui_splash_step("Building UI", 62);
   register_apps();
   AppManager::inst().begin();
+  ui_caffeine_init();
 
   ui_splash_step("Sensors", 78);
 #if defined(USING_BMA423_SENSOR)
@@ -270,6 +272,7 @@ void setup() {
 }
 
 void loop() {
+    ui_load_tick();
     static uint32_t last_db_flush = 0;
     static uint32_t last_pm_tick = 0;
     static uint32_t last_lv       = 0;

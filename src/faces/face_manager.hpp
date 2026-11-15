@@ -26,6 +26,8 @@ public:
         lv_obj_t*            source    = nullptr;   // где лежат виджеты, когда face не активен
         FaceUpdateFn         update    = nullptr;   // для сгенерированных
         void               (*def_update)() = nullptr; // для дефолтного
+        void               (*on_show)() = nullptr;   // face смонтирован на lock
+        void               (*on_hide)() = nullptr;   // face снят
     };
 
     static FaceManager& inst();

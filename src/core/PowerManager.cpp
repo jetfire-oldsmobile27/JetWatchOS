@@ -66,8 +66,11 @@ void PowerManager::poll()
 void PowerManager::tick()  
 {
     if (!datacache::monitor_valid()) return;
+    
     const monitor_params_t& mp = datacache::monitor();
     _batt_pct = mp.battery_percent;
+
+    if (_caffeine && _batt_pct < 20 && !mp.is_charging) setCaffeine(false);
 
     // --- Детектор старта/остановки зарядки ---
     bool now_chg = mp.is_charging && mp.battery_present;
@@ -87,8 +90,9 @@ void PowerManager::tick()
     }
 
     // --- Таймаут экрана ---
-    if (!_screen_off && _timeout_ms > 0 && UI_INACTIVE_MS() > _timeout_ms)
+    if (!_screen_off && !_caffeine && _timeout_ms > 0 && UI_INACTIVE_MS() > _timeout_ms) {
         screenOff();
+    }
 }
 
 void PowerManager::setPowerSave(bool on)
@@ -113,4 +117,14 @@ void PowerManager::setPowerSave(bool on)
         _timeout_ms = Database::inst().config().disp_timeout_s * 1000UL;
         Serial.println("[PWR] power-save OFF");
     }
+}
+
+void PowerManager::setCaffeine(bool on)
+{
+    if (_caffeine == on) return;
+    _caffeine = on;
+    if (on && _screen_off) wake();
+    UI_TRIGGER_ACTIVITY();
+    ui_statusbar_set_caffeine(on);
+    Serial.printf("[PWR] caffeine %s\n", on ? "ON" : "OFF");
 }

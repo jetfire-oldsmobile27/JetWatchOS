@@ -2,6 +2,7 @@
 #include "core/PowerManager.h"
 #include "core/DataCache.hpp"
 #include <ctime>
+#include <vector>
 
 struct SbCtx {
     lv_obj_t*  time{nullptr};
@@ -10,6 +11,7 @@ struct SbCtx {
     lv_obj_t*  batt_fill{nullptr};
     lv_obj_t*  bolt{nullptr};
     lv_timer_t* timer{nullptr};
+    lv_obj_t* coffee{nullptr};
 
     // Кэш предыдущих значений — не дёргаем LVGL без нужды
     int  last_pct{-999};
@@ -19,8 +21,13 @@ struct SbCtx {
     bool was_charging{false};   // для детектора старта зарядки
 };
 
+static std::vector<SbCtx*> s_bars;
+
+static void sb_apply_caffeine(SbCtx* c); //fwd
+
 static void sb_refresh(SbCtx* c)
 {
+    sb_apply_caffeine(c);
     if (!datacache::time_valid()) return;
     const struct tm& t = datacache::time();
     lv_label_set_text_fmt(c->time, "%02d:%02d", t.tm_hour, t.tm_min);
@@ -98,6 +105,9 @@ static void sb_timer(lv_timer_t* t) {
 
 static void sb_on_delete(lv_event_t* e) {
     auto* c = static_cast<SbCtx*>(lv_event_get_user_data(e));
+    for (size_t i = 0; i < s_bars.size(); ++i) {
+        if (s_bars[i] == c) { s_bars.erase(s_bars.begin() + i); break; };
+    }
     if (c->timer) lv_timer_del(c->timer);
     delete c;
 }
@@ -120,6 +130,15 @@ lv_obj_t* ui_make_statusbar(lv_obj_t* parent)
     c->bt = ui_make_label(bar, &lv_font_montserrat_12, ui::dot(),
                           LV_SYMBOL_BLUETOOTH);
     lv_obj_align(c->bt, LV_ALIGN_CENTER, 0, 3);
+
+    c->coffee = UI_IMG_CREATE(bar);
+    UI_IMG_SET_SRC(c->coffee, &img_coffee_s);
+    lv_obj_set_style_image_recolor(c->coffee, ui::accent(), 0);
+    lv_obj_set_style_image_recolor_opa(c->coffee, LV_OPA_COVER, 0);
+    lv_obj_align(c->coffee, LV_ALIGN_CENTER, -24, 3);     // слева от BT
+    lv_obj_add_flag(c->coffee, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(c->coffee, LV_OBJ_FLAG_CLICKABLE);
+    s_bars.push_back(c);
 
     c->batt_tx = ui_make_label(bar, F_TINY, ui::text(), "--");
     lv_obj_align(c->batt_tx, LV_ALIGN_RIGHT_MID, -42, 3);
@@ -161,4 +180,16 @@ lv_obj_t* ui_make_statusbar(lv_obj_t* parent)
     lv_obj_add_event_cb(bar, sb_on_delete, LV_EVENT_DELETE, c);
     sb_refresh(c);
     return bar;
+}
+
+static void sb_apply_caffeine(SbCtx* c)
+{
+    if (!c->coffee) return;
+    if (PowerManager::inst().isCaffeine()) lv_obj_clear_flag(c->coffee, LV_OBJ_FLAG_HIDDEN);
+    else                                   lv_obj_add_flag(c->coffee, LV_OBJ_FLAG_HIDDEN);
+}
+
+void ui_statusbar_set_caffeine(bool)
+{
+    for (auto* c : s_bars) sb_apply_caffeine(c);
 }

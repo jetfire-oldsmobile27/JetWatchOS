@@ -57,10 +57,10 @@ static void make_tile(lv_obj_t* tv, int tile_col, int face_idx)
         lv_obj_set_style_radius(ph, 80, 0);
         lv_obj_set_style_bg_color(ph, lv_color_hex(0x333333), 0);
         lv_obj_set_style_border_width(ph, 0, 0);
-        lv_obj_clear_flag(ph, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_t* ini = ui_make_label(ph, F_HERO, lv_color_white(),
-                                      e.name[0] ? "D" : "?");
-        lv_obj_center(ini);
+        lv_obj_clear_flag(ph, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));  // ← главное
+        char ini[2] = { e.name[0] ? e.name[0] : '?', 0 };
+        lv_obj_t* ini_l = ui_make_label(ph, F_HERO, lv_color_white(), ini);
+        lv_obj_center(ini_l);
     }
 
     lv_obj_t* lbl = ui_make_label(btn, F_TITLE, lv_color_white(), e.name);

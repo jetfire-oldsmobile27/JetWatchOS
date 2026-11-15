@@ -33,13 +33,17 @@ public:
     void sleepNow()      { screenOff(); }
     void lightSleepNow() { screenOff(); }
 
+    void setCaffeine(bool on);
+    bool isCaffeine() const { return _caffeine; }
+
 private:
     uint32_t _timeout_ms    = 15000;
     uint8_t  _batt_pct      = 100;
-    bool     _bt_active     = false;
-    bool     _low_state     = false;
-    bool     _screen_off    = false;  
-    bool     _was_charging  = false;
-    bool     _had_battery   = false;
-    bool     _power_save    = false;
+    bool     _bt_active {false};
+    bool     _low_state {false};
+    bool     _screen_off{false};  
+    bool     _was_charging{false};
+    bool     _had_battery{false};
+    bool     _power_save{false};
+    bool _caffeine{false};
 };
